@@ -9,6 +9,7 @@ description = "An agent-native executable contract language and runtime"
 requires-python = ">=3.10"
 dependencies = [
     "PyYAML>=6.0.0",
+    "ag-ui-protocol>=0.1.22",
 ]
 
 [project.optional-dependencies]
