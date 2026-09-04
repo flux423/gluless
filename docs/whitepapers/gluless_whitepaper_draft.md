@@ -203,7 +203,7 @@ The normative artifact should be a versioned, deterministic, serializable interm
 
 This is especially important for an agent-native language because agents can construct, inspect, transform, validate, and negotiate structured IR directly. A textual surface syntax becomes one optional encoding among several.
 
-### 14.1 Example conceptual IR
+### 3.1 Example conceptual IR
 
 ```json
 {
@@ -254,7 +254,7 @@ This is especially important for an agent-native language because agents can con
 
 The exact field names are not the point at this stage. The important architectural requirement is that the IR can be validated without asking a language model what it means.
 
-### 14.2 Required IR properties
+### 3.2 Required IR properties
 
 The canonical IR should be:
 
@@ -277,7 +277,7 @@ Canonicalization becomes especially important if approvals or delegated executio
 
 The strongest MVP route is to make an existing API operation executable as a typed Utility with minimal glue.
 
-### 15.1 Import pipeline
+### 4.1 Import pipeline
 
 ```text
 OpenAPI document
@@ -295,7 +295,7 @@ OpenAPI document
 
 The importer should preserve provenance back to the original API description.
 
-### 15.2 Utility identity
+### 4.2 Utility identity
 
 A Utility identity must be stable enough for Limits to target it.
 
@@ -313,7 +313,7 @@ crm.contacts.create@v1
 
 Best is likely a canonical identity that can retain provider namespace, interface type, source revision, operation identity, and semantic versioning without making human naming conventions normative.
 
-### 15.3 Side effects are first-class metadata
+### 4.3 Side effects are first-class metadata
 
 Input/output schemas are insufficient for governed execution. The runtime needs to distinguish reads from mutations and ideally understand classes of mutation.
 
@@ -334,7 +334,7 @@ unknown
 
 `unknown` must be meaningful. Unknown side effects should not silently inherit the authority of harmless reads.
 
-### 15.4 Utility descriptions are not authority
+### 4.4 Utility descriptions are not authority
 
 An imported API specification or MCP tool can describe itself, but self-description should never grant permission.
 
@@ -358,19 +358,52 @@ As the Utility Registry expands to encompass fanned-out capability providers, co
 
 This separation enables planners to select capabilities purely based on semantic identity without coupling the resulting contract to specific provider protocols.
 
-## 6. Persistent Utility Registries & Ephemeral Context Projections
+## 6. The Three Planes, Persistent Registries, and Context Projections
 
-
-To execute scaling agentic workloads efficiently, runtimes must not flood prompt context windows with large lists of raw tool specifications or thousands of API endpoints. Doing so degrades reasoning quality and inflates cost.
+To execute scaling agentic workloads efficiently, runtimes must not flood prompt context windows with large lists of raw tool specifications or thousands of API endpoints. Doing so degrades reasoning quality and inflates cost. 
 
 $$\text{KNOWLEDGE} \neq \text{CONTEXT}$$
 
-To formalize this distinction, GluLess implements a decoupled knowledge architecture:
-1.  **Durable Utility Registry**: A persistent catalog that normalizes capabilities imported from OpenAPI, MCP, GraphQL, or A2A. Instead of planning against raw documents, agents query this structured plane.
-2.  **Durable Experience Index**: Tracks invocation latencies, error frequencies, and goal achievements across execution cycles.
-3.  **Ephemeral Context Resolver**: Evaluates contract goals and active limits against the registry. It filters out denied utilities, ranks allowed utilities based on telemetry, and projects a minimal working set for the planner.
+To formalize this, GluLess separates the system architecture into three decoupled planes:
+
+### 6.1 The Three Planes
+
+1. **Contract Plane**: Declares the semantic requirements: Goals, Limits, Utility specifications, and Evidence criteria.
+2. **Knowledge Plane**: Stores durable, multi-run capability mappings: the Utility Registry (normalized schemas), Bindings (transports), and the Experience Index (empirical performance telemetry).
+3. **Execution Plane**: Resolves the transient Context Projection, executes the next-valid-action planning loop, routes actions through the LimitEvaluator, invokes the Binding Executor, and verifies results.
+
+### 6.2 Bounded Context Projections
+
+Rather than reasoning over all raw registry data, the planner is presented with a compiled, ephemeral, non-authoritative working set:
 
 $$\text{CONTEXT} \neq \text{SOURCE_OF_TRUTH}$$
+
+The **Context Resolver** compiles this Context Projection dynamically using a strict, two-step pipeline:
+
+#### I. Deterministic Filter
+First, the resolver filters out incompatible and unauthorized utilities:
+* **TYPE**: Verify structural interface mapping.
+* **CAPABILITY**: Match semantic capability requirements to the goals.
+* **LIMITS**: Route candidate utilities through the `LimitEvaluator` to prune denied actions immediately.
+* **ENVIRONMENT**: Filter by current infrastructure execution scope.
+* **VERSION**: Confirm schema and target revisions match.
+
+#### II. Empirical Rank
+Only utilities that pass the filter are then prioritized:
+* **SEMANTIC RELEVANCE**: Match specificity of the action to the Goal context.
+* **GOAL CONTRIBUTION**: Prioritize tools with historical success in resolving the specific state target.
+* **RELIABILITY**: Rank by success rates.
+* **LATENCY**: Rank by median response time.
+* **COST**: Rank by resource/financial bounds.
+* **EVIDENCE QUALITY**: Rank by cryptographic validity and verify completeness.
+
+### 6.3 Core Resolution Invariants
+
+This pipeline enforces two non-negotiable resolution rules:
+* **COMPATIBILITY BEFORE OPTIMIZATION**: Telemetry optimization (such as speed or cost) must never override type or environmental compatibility checks.
+* **AUTHORITY BEFORE EXPERIENCE**: Historical success rates and performance metrics can never expand invocation permissions; authority boundaries are always evaluated against Limits first.
+
+$$\text{PAST_SUCCESS} \neq \text{CURRENT_AUTHORITY}$$
 
 ---
 
@@ -380,7 +413,7 @@ $$\text{CONTEXT} \neq \text{SOURCE_OF_TRUTH}$$
 
 Limits must be evaluated at several phases, not once.
 
-### 16.1 Validation-time Limits
+### 7.1 Validation-time Limits
 
 Before planning:
 
@@ -389,7 +422,7 @@ Before planning:
 - Is required approval policy resolvable?
 - Is a requested budget invalid?
 
-### 16.2 Plan-time Limits
+### 7.2 Plan-time Limits
 
 When evaluating candidate plans:
 
@@ -398,7 +431,7 @@ When evaluating candidate plans:
 - Does the plan require an approval boundary?
 - Does delegation exceed granted authority?
 
-### 16.3 Invocation-time Limits
+### 7.3 Invocation-time Limits
 
 Immediately before every mutation:
 
@@ -408,7 +441,7 @@ Immediately before every mutation:
 - Has the budget already been consumed?
 - Is the credential scope valid for the target?
 
-### 16.4 Postcondition Limits
+### 7.4 Postcondition Limits
 
 After mutation:
 
@@ -516,7 +549,7 @@ It is complete when the Goal is satisfied under the required evidence policy.
 
 That means GluLess needs explicit Goal evaluation.
 
-### 18.1 Deterministic evaluation
+### 10.1 Deterministic evaluation
 
 Prefer deterministic evaluation when the state can be typed and observed:
 
@@ -525,11 +558,11 @@ observed.version == requested.version
 AND observed.health == "healthy"
 ```
 
-### 18.2 Evaluator Utilities
+### 10.2 Evaluator Utilities
 
 Some Goals require querying an external system. In those cases the evaluator may invoke read-only Utilities to observe current state.
 
-### 18.3 AI-assisted evaluation
+### 10.3 AI-assisted evaluation
 
 Some outcomes are semantic rather than purely structural. For example, “the incident report contains a complete root-cause analysis supported by cited telemetry.”
 
@@ -550,7 +583,7 @@ AI evaluation should be explicit evidence, not hidden runtime intuition.
 
 GluLess should define separate types for four concepts that agent frameworks often blur together.
 
-### 19.1 Event
+### 11.1 Event
 
 A fact about runtime progression.
 
@@ -565,7 +598,7 @@ GoalSatisfied
 RunFailed
 ```
 
-### 19.2 Result
+### 11.2 Result
 
 The structured terminal outcome of the contract run.
 
@@ -579,7 +612,7 @@ evidence set
 failure reason if any
 ```
 
-### 19.3 Artifact
+### 11.3 Artifact
 
 A durable product created during execution:
 
@@ -593,7 +626,7 @@ message
 record
 ```
 
-### 19.4 Evidence
+### 11.4 Evidence
 
 A record that substantiates an asserted fact.
 
@@ -621,7 +654,7 @@ Runtimes optimize future capability resolution by gathering invocation facts, wi
 
 $$\text{PAST_SUCCESS} \neq \text{CURRENT_AUTHORITY}$$
 
-An operation's historical success rate may influence its priority ranking, but it can never expand its current authorization. Every mutation must pass through the deterministic gate of the contract's Limits prior to execution.
+A utility's historical success rate may influence its priority ranking, but it can never expand its current authorization. Every mutation must pass through the deterministic gate of the contract's Limits prior to execution.
 
 Furthermore, we preserve evidence integrity by keeping declarative specs separate from empirical observations:
 
@@ -639,11 +672,11 @@ Agent autonomy raises the cost of ambiguous authority because the runtime can di
 
 GluLess should therefore adopt several non-negotiable invariants.
 
-### 20.1 Deny is enforceable, not advisory
+### 13.1 Deny is enforceable, not advisory
 
-If a Limit denies an operation class, planner output cannot override it.
+If a Limit denies a utility pattern, planner output cannot override it.
 
-### 20.2 Approval binds to a precise action
+### 13.2 Approval binds to a precise action
 
 Approval should be bound to canonical contract/action data rather than a vague conversation turn.
 
@@ -657,15 +690,15 @@ side-effect class
 relevant state snapshot
 ```
 
-### 20.3 Secrets are external
+### 13.3 Secrets are external
 
 Credentials and secret values should not live in GluLess source. Utility resolution should use established secret and identity providers.
 
-### 20.4 Delegation does not amplify authority
+### 13.4 Delegation does not amplify authority
 
 An agent delegated a task through A2A or another mechanism must receive no greater authority than the parent execution can grant.
 
-### 20.5 Evidence and logs must not leak secrets
+### 13.5 Evidence and logs must not leak secrets
 
 Observability is not permission to serialize credentials, tokens, private payloads, or sensitive intermediate model context.
 
@@ -679,13 +712,13 @@ Evidence must be intentionally constructed, redacted where required, and policy-
 
 The architecture of GluLess is governed by a core Sovereignty Model and a strict separation of execution and storage concerns. These principles ensure that GluLess remains a portable layer above existing systems rather than a new platform dependency.
 
-### 21.1 Stateless Core: Refusing State Custody
+### 14.1 Stateless Core: Refusing State Custody
 
 The GluLess runtime must never become the authoritative owner of application state. Durable domain state remains under the custody of its respective system of record (e.g., Customer state in CRM, Issue state in Git, Deployment state in Kubernetes). The runtime holds only transient execution state, including the active contract, observation history, and evidence references.
 
 $$\text{WORLD_STATE} \neq \text{EXECUTION_STATE}$$
 
-### 21.2 Data Sovereignty: Access does not equal Custody
+### 14.2 Data Sovereignty: Access does not equal Custody
 
 Treating data under authority domains is fundamental. An executing agent having access to resources does not transfer custody of those resources to the GluLess runtime. 
 
@@ -693,7 +726,7 @@ Treating data under authority domains is fundamental. An executing agent having 
 *   **Observation vs Possession**: $\text{OBSERVATION} \neq \text{POSSESSION}$.
 *   **Context vs Persistence**: $\text{CONTEXT} \neq \text{PERSISTENCE}$. An agent can reason over information in its context window without the runtime assuming permanent persistence or custody.
 
-### 21.3 Language & Protocol Agnosticism
+### 14.3 Language & Protocol Agnosticism
 
 GluLess is host-language and protocol agnostic by construction. Host-language abstractions (such as Python classes or Rust structs) are generated projections, never the defining authority of the language.
 
@@ -704,7 +737,7 @@ Similarly, capabilities and transport are decoupled from the core contract seman
 $$\text{PROTOCOL} \neq \text{SEMANTICS}$$
 $$\text{TRANSPORT} \neq \text{CONTRACT}$$
 
-### 21.4 The Invariant Taxonomy
+### 14.4 The Invariant Taxonomy
 
 To preserve these boundaries under autonomous agent execution, the runtime enforces the following non-negotiable invariants:
 
@@ -740,11 +773,11 @@ To preserve these boundaries under autonomous agent execution, the runtime enfor
 
 To scale under autonomous agent operation, GluLess optimizes for contract assembly, modification, and evaluation directly by intelligent systems rather than manual human authoring.
 
-### 22.1 Componentization: Composing Orthogonal Primitives
+### 15.1 Componentization: Composing Orthogonal Primitives
 
 A contract is not a monolithic script, but a composition of independently addressable, versioned, and schema-validated components: Goals, Limits, Utilities, and EvidenceRequirements. Each primitive remains strictly orthogonal. A Goal specifies truth but never procedural actions; a Utility describes capability but never authorization; a Limit governs execution but never transport.
 
-### 22.2 Utility vs. Binding Separation
+### 15.2 Utility vs. Binding Separation
 
 A fundamental boundary separates a capability's identity and contract from its environment-specific transport configuration.
 
@@ -753,13 +786,13 @@ $$\text{UTILITY} \neq \text{BINDING}$$
 *   **Utility**: Defines the semantic capability signature (input, output, side effects, required evidence) and is referenced inside the contract.
 *   **Binding**: Defines the transport-specific implementation (an OpenAPI path, an MCP tool, or an A2A endpoint) resolved and bound dynamically by the runtime at the execution boundary.
 
-### 22.3 Semantic Capability Selection
+### 15.3 Semantic Capability Selection
 
 Runtimes support semantic query selection rather than explicit endpoint enumeration. Planners query the capability space (e.g., selecting utilities that match a domain and carry specific side-effect limits), allowing the runtime to substitute equivalent providers dynamically:
 
 $$\text{CAN_SATISFY}(\text{required_capability}, \text{candidate_utility})$$
 
-### 22.4 Next-Valid-Action Reasoning and Disposable Plans
+### 15.4 Next-Valid-Action Reasoning and Disposable Plans
 
 GluLess does not require pre-determining an entire workflow graph before starting execution. The preferred agent execution loop evaluates next-valid-actions iteratively:
 
@@ -772,7 +805,7 @@ $$\text{PLAN_FAILURE} \neq \text{CONTRACT_FAILURE}$$
 
 A failed or discarded plan does not imply a failed contract; the runtime remains free to re-plan or resolve alternative paths.
 
-### 22.5 Structural Reuse and Density
+### 15.5 Structural Reuse and Density
 
 GluLess avoids class inheritance and super-interfaces. Components are composed structurally through composition, selection, and references. The language and IR are designed to maximize semantic density and minimize verbosity:
 
@@ -1133,7 +1166,7 @@ This is the GluLess gap.
 
 The product thesis is **not** that every individual element is new. Most are not. The thesis is that agentic systems need a canonical execution contract that composes these concerns without reducing them to prompt text or hard-coded orchestration graphs.
 
-### 13.1 Comparison matrix
+### 26.1 Comparison matrix
 
 | System / standard | Goal semantics | Limits / policy | Capability description | Dynamic agent planning | Durable execution | Events | Evidence as completion proof |
 |---|---|---|---|---|---|---|---|
@@ -1203,7 +1236,7 @@ If not, the feature probably belongs in an existing implementation language or s
 
 The initial MVP should prove one complete contract over one real API.
 
-### 25.1 Required vertical slice
+### 29.1 Required vertical slice
 
 ```text
 OpenAPI document
@@ -1226,7 +1259,7 @@ OpenAPI document
 
 The value of this slice is not feature count. It tests whether a contract can actually remove glue between intent, capability, authority, execution, and proof.
 
-### 25.2 What the MVP should avoid
+### 29.2 What the MVP should avoid
 
 ```text
 IDE
@@ -1244,7 +1277,7 @@ proprietary event transport
 
 If the slice requires one of those, first test whether an existing owner can be configured or composed.
 
-### 25.3 A strong MVP scenario
+### 29.3 A strong MVP scenario
 
 A good demonstration has:
 
@@ -1314,29 +1347,29 @@ A serious architecture needs conditions under which its central claim should be 
 
 GluLess may not deserve to exist as a distinct language/runtime if any of the following become true.
 
-### 27.1 Existing protocols converge on the complete contract
+### 31.1 Existing protocols converge on the complete contract
 
 If MCP, A2A, or another broadly adopted standard gains portable first-class semantics for Goals, cross-capability Limits, planner freedom, deterministic enforcement, and evidence-backed completion, a separate GluLess layer may become redundant.
 
 The correct response would be to contribute to or adopt the standard, not preserve GluLess by inventing artificial differentiation.
 
-### 27.2 Goal semantics are too domain-specific
+### 31.2 Goal semantics are too domain-specific
 
 If useful Goals cannot be normalized beyond application-specific code, the language may collapse into a thin metadata wrapper around custom evaluators.
 
 The MVP must therefore prove at least one reusable Goal/evaluator pattern.
 
-### 27.3 Utility metadata is too weak for safe planning
+### 31.3 Utility metadata is too weak for safe planning
 
 If real APIs cannot provide enough side-effect, precondition, and result information for an agent to choose actions safely, GluLess may require more semantic annotation than the ecosystem will realistically maintain.
 
 The graded Utility model should be tested directly rather than assumed sufficient.
 
-### 27.4 Limits cannot remain portable
+### 31.4 Limits cannot remain portable
 
 If authorization, approval, budget, and invariant semantics are inseparable from each deployment environment, the canonical Limit model may need to be much smaller than envisioned.
 
-### 27.5 Evidence becomes pure application convention
+### 31.5 Evidence becomes pure application convention
 
 If GluLess cannot define portable evidence binding and every domain simply emits arbitrary logs, then “evidence-backed execution” is branding rather than a language property.
 

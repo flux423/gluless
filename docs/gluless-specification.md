@@ -1,70 +1,124 @@
 # gluless Specification (v0.1.0)
 
 ## 1. Philosophy
-gluless is a typed, declarative contract system for describing desired state, authority, capabilities, constraints, and evidence, from which intelligent runtimes derive and execute permitted plans.
+gluless is a typed, declarative contract system for describing desired state, authority, utilities, and evidence, from which intelligent runtimes derive and execute permitted plans.
 
-Unlike traditional agent frameworks that focus on orchestrating prompt flows or tool calls, gluless separates **intent and boundaries** from **execution logic**. It defines the boundaries of a solution space. Agents may reason freely inside that space, but every consequential action must resolve to a typed, authorized, observable operation.
-
-The runtime discovers implementations, the planner derives candidate execution graphs, and the policy engine validates security boundaries deterministically.
+Unlike traditional agent frameworks that focus on orchestrating prompt flows or tool calls, gluless separates **intent and boundaries** from **execution logic**. It defines the boundaries of a solution space. Agents may reason freely inside that space, but every consequential action must resolve to a typed, authorized, observable utility.
 
 ---
 
-## 2. Computational Model
+## 2. Computational Model & The Three Planes
 
-The lifecycle of a gluless contract execution follows a strict pipeline:
+GluLess execution is organized across three distinct, decoupled planes:
 
+### 2.1 The Three Planes
+
+```text
+                 CONTRACT PLANE
+          Goal · Limits · Utilities
+                       │
+                       ▼
+                 KNOWLEDGE PLANE
+         Registry · Bindings · Experience
+                       │
+                       ▼
+                 EXECUTION PLANE
+ Context → Plan → Authorize → Execute → Observe
+                       │
+                       ▼
+               Evidence · Result
+                       │
+                       └──► Experience
 ```
-[Declaration (gluless)]
-          │
-          ▼
-      [Resolver]          ← (Discovers available agent/resource capabilities)
-          │
-          ▼
-  [Capability Graph]
-          │
-          ▼
-      [Planner]          ← (Derives candidate execution graphs)
-          │
-          ▼
-   [Policy Engine]       ← (Eliminates forbidden graphs deterministically)
-          │
-          ▼
-   [Execution Graph]
-          │
-          ▼
-      [Executor]          ← (Performs typed operations)
-          │
-          ▼
-    [Event Ledger]        ← (Records state changes & evidence)
+
+*   **Contract Plane**: Declares semantic requirements: Goals, Limits, Utility specifications, and Evidence criteria.
+*   **Knowledge Plane**: Stores durable capability mappings: the Utility Registry (normalized specs), Bindings (transports), and the Experience Index (empirical performance telemetry).
+*   **Execution Plane**: Compiles the transient Context Projection, executes the next-valid-action planning loop, routes actions through the LimitEvaluator, gathers observations, and verifies outcomes.
+
+### 2.2 Execution Model Loop
+
+The core execution flow follows this data and authority pipeline:
+
+```text
+                 GLULESS CONTRACT
+            Goal · Limits · Utilities
+                         │
+                         ▼
+                  Context Resolver
+                         │
+            ┌────────────┼────────────┐
+            │            │            │
+      UtilityRegistry Observations ExperienceIndex
+            │            │            │
+            └────────────┼────────────┘
+                         ▼
+                 ContextProjection
+                         │
+                         ▼
+                       Agent
+                         │
+                  candidate action
+                         │
+                         ▼
+                   LimitEvaluator
+                         │
+                         ▼
+                       Binding
+                         │
+                         ▼
+                      Executor
+                         │
+                         ▼
+                  External System
+                         │
+                         ▼
+                      Observer
+                         │
+                         ▼
+                      Evidence
+                    ┌────┴─────┐
+                    │          │
+             GoalEvaluator  ExperienceIndex
+                    │
+                    ▼
+                  Result
 ```
 
 ---
 
-## 3. Core Primitives
+## 3. Core Ontology
 
-The core language model of gluless is built upon the following distinct primitives:
+GluLess strictly aligns its language model around the following hierarchy of primitives, supporting the core thesis of **GLU (Goal · Limits · Utilities)**:
 
-*   **gluless**: The top-level declarative contract containing goals, invariants, and authority definitions.
-*   **entity**: A typed domain object within the system (e.g., `City`, `Repository`, `DoltDatabase`).
-*   **state**: The current attribute values of an entity.
-*   **goal**: A desired condition that the system must bring about.
-*   **invariant**: A condition that must never be violated during execution.
-*   **capability**: An interface exposing a group of resources or potential actions.
-*   **operation**: A specific, typed, executable method on a capability.
-*   **authority**: The permission layer defining what operations are allowed, denied, or require approval.
-*   **policy**: Governance rules restricting capability execution.
-*   **constraint**: Hard limits on performance, cost, or resource utilization.
-*   **event**: An immutable record of a state transition or system occurrence.
-*   **evidence**: Verifiable proof that a state transition or goal has been achieved.
-*   **artifact**: A generated output or document resulting from an operation.
-*   **approval**: A human or system gate authorizing a specific plan or execution step.
-*   **result**: The verified outcome of the contract execution.
+### 3.1 Primary Contract Semantics
+*   **Goal**: The target success state definition or condition the runtime must bring about.
+*   **Limits**: Declarative restrictions governing all execution paths, defining the boundaries of permitted behavior.
+*   **Utilities**: Typed, abstract capability interfaces that are declared in the contract and can be invoked.
+
+### 3.2 Supporting Runtime Semantics
+*   **Observation**: Structured, raw telemetry measurements of system state.
+*   **Evidence**: Verifiable proof (e.g. hash, cryptographic check, git commit SHA) demonstrating state transitions.
+*   **Event**: Immutable ledger record representing a milestone in runtime execution.
+*   **Result**: The final verified outcome of the contract run.
+*   **Artifact**: Any file or output generated as a side-effect of execution.
+*   **Binding**: The environment-specific transport configuration realizing a Utility interface.
+*   **Approval**: A security gate requiring manual or system authorization for a specific plan or execution step.
+*   **Identity**: A verified cryptographic actor or principal executing under the contract.
+
+### 3.3 Limit Subtypes
+*   **Authority**: Permissive or restrictive declarations matching utility patterns (e.g., `allow` / `deny`).
+*   **Policy**: Globally inherited platform rules restricting execution parameters.
+*   **Constraint**: Hardware or budget boundaries (e.g., maximum cost, time limits).
+*   **Invariant**: Conditions that must evaluate to `true` at every step of execution.
+*   **Budget**: Financial or resource limits allocated for the plan.
+*   **ApprovalRequirement**: Conditions specifying when an explicit approval is needed.
+*   **EvidenceRequirement**: Declarations of what proof is required to verify state transitions.
 
 ---
 
 ## 4. Type System
 
-All entities, capabilities, operations, and evidence in gluless are strictly typed. This prevents runtime interpretation errors and ensures static validation is mathematically provable.
+All elements, including goals, utility schemas, limit definitions, and evidence in gluless are strictly typed. This prevents runtime interpretation errors and ensures static validation is mathematically provable.
 
 Types include:
 *   Primitive types (`string`, `boolean`, `integer`, `float`, `datetime`).
@@ -79,45 +133,44 @@ All actors—including human operators, planner runtimes, and fanned-out special
 
 ---
 
-## 6. Capability Model
+## 6. Capability, Utility, and Binding Model
 
-A capability is a discoverable interface. It describes *what* resource is available, whereas an operation defines *how* to interact with it. 
+A **Capability** is a semantic property describing *what* can be achieved (e.g. `issue.read`), while a **Utility** is a typed interface that provides that capability. A **Binding** realizes the utility for a specific transport endpoint (e.g. GitLab REST or MCP).
 
 Example:
-*   **Capability:** `GitLab.MergeRequest`
-*   **Operation:** `GitLab.MergeRequest.merge`
-
-Protocol adapters (e.g., MCP, A2A, CLI, REST) implement capabilities.
+*   **Capability / Goal Requirement:** `issue.read`
+*   **Utility:** `GitLab.Issues.get` (declared schema)
+*   **Binding:** `https://gitlab.example.com/api/v4/projects/{id}/issues/{issue_iid}` (HTTP transport)
 
 ---
 
 ## 7. Authority Model
 
-Authority is declarative and evaluated prior to execution. The planner proposes actions, but a separate, deterministic policy engine approves or denies them.
+Authority is declarative, defining the contract's Limits, and evaluated prior to execution. The planner proposes candidate actions, but a deterministic LimitEvaluator approves or denies them.
 
-*   `allow <operation>`: Permits the operation within the solution space.
-*   `allow <operation> when <condition>`: Conditional authorization.
-*   `require approval for <operation>`: Inserts a human-in-the-loop gate.
-*   `deny <operation>`: Explicitly forbids the operation under any planning tree.
+*   `allow <utility>`: Permits the utility invocation.
+*   `allow <utility> when <condition>`: Conditional authorization.
+*   `require approval for <utility>`: Inserts a human-in-the-loop gate.
+*   `deny <utility>`: Explicitly forbids the utility under any planning tree.
 
 ---
 
 ## 8. State Model
 
-The system operates as a state transition machine. Every operation takes the system from state $S_n$ to $S_{n+1}$. Transitions are valid only if they conform to the authority model and do not violate any declared invariants.
+The system operates as a state transition machine. Every utility execution takes the system from state $S_n$ to $S_{n+1}$. Transitions are valid only if they conform to the Limits.
 
 ---
 
 ## 9. Policy Model
 
-Policies define global constraints across projects, runtimes, and teams. They are enforced at the organization or platform level, ensuring that even if a local gluless file permits an action, a global policy can override and block it (e.g., forbidding plaintext secrets in command-line arguments).
+Policies represent globally inherited Limits enforced across projects, runtimes, and teams at the organization or platform level. Even if a local contract permits a utility, global policies can override and block the execution.
 
 ---
 
 ## 10. Goal and Invariant Semantics
 
-*   **Goal**: Evaluates to `true` when the desired state is reached. Runtimes plan backward from goals.
-*   **Invariant**: Must evaluate to `true` at every step of the execution graph. If any candidate plan violates an invariant at step $i$, that path is eliminated.
+*   **Goal**: Evaluates to `true` when the desired state is reached. Runtimes plan next-valid-actions to satisfy the Goal.
+*   **Invariant (a Limit subtype)**: Must evaluate to `true` at every step of the execution graph. If any candidate action violates an invariant, that path is blocked.
 
 ---
 
@@ -135,13 +188,13 @@ Success is not declared by the executor; it is verified independently via eviden
 
 ## 13. Planner Contract
 
-The planner takes the gluless declaration, current state, capability graph, and policies, and solves for a valid execution path.
+The planner takes the gluless contract, current state, context projection, and active limits, and solves for a valid execution path.
 
 ```
-Current State + Goal + Capabilities + Invariants = Execution Plan
+Current State + Goal + Utilities + Limits = Execution Plan
 ```
 
-If the specification is unsatisfiable (e.g., a required capability is missing or blocked by policy), compilation fails statically.
+If the contract is unsatisfiable (e.g., a required utility has no compatible binding or is blocked by limits), compilation fails statically.
 
 ---
 
@@ -153,31 +206,31 @@ The Execution Graph is the concrete plan derived by the planner for a specific s
 
 ## 15. Runtime Contract
 
-The runtime executes the execution graph step-by-step. If a step fails, the runtime halts, updates the current state, and invokes the planner to derive a recovery execution path, ensuring no invariants are violated during recovery.
+The runtime executes the execution graph step-by-step. If a step fails, the runtime halts, updates the current state, and invokes the planner to derive a recovery execution path, ensuring no limits are violated during recovery.
 
 ---
 
-## 16. Protocol Adapters
+## 16. Protocol Bindings & Adapters
 
-Protocol adapters (e.g., MCP servers, A2A messaging, HTTP clients, SQL interfaces) connect capabilities to real-world software. They are pluggable and independent of the core gluless language.
+Protocol adapters (e.g., MCP servers, A2A messaging, HTTP clients, SQL databases) realize the concrete Bindings for abstract Utilities. They are pluggable and independent of the core gluless language.
 
 ---
 
 ## 17. Human Approval Semantics
 
-When an operation requires approval, the execution graph pauses, serializes its current state and proposed step, and exposes a human-interface gate. The human review is supported by the generated evidence and execution path.
+When a utility execution step requires approval under its Limits, the runtime pauses execution, serializes its current state and proposed action, and exposes a human-interface gate. The human review is supported by the generated evidence and proposed step.
 
 ---
 
 ## 18. Failure Semantics
 
-Failure is typed. If an operation fails, the system classifies the failure (e.g., `AUTHORIZATION_DENIED`, `RESOURCE_NOT_FOUND`, `NETWORK_TIMEOUT`) and triggers fallback paths defined in the authority or policy engine.
+Failure is typed. If a utility invocation fails, the system classifies the failure (e.g., `AUTHORIZATION_DENIED`, `RESOURCE_NOT_FOUND`, `NETWORK_TIMEOUT`) and triggers fallback paths defined in the Limits or execution engine.
 
 ---
 
 ## 19. Versioning
 
-Contracts carry semantic versions (e.g., `v0.1.0`). If a capability interface updates, the contract must be recompiled to verify that dependencies and operations remain valid against the new capability signature.
+Contracts carry semantic versions (e.g., `v0.1.0`). If a utility interface or schema updates, the contract must be recompiled to verify that dependencies and utility signatures remain valid.
 
 ---
 
@@ -192,50 +245,56 @@ gluless enforces a multi-dimensional Sovereignty Model to protect state, data, a
 
 ---
 
-## 21. Non-Negotiable Invariants
+## 21. Non-Negotiable Invariant Families
 
-All gluless implementations and runtimes must enforce these invariants at all times, organized by category:
+All gluless implementations, tools, and runtimes must enforce these invariants at all times, organized by core architectural families:
 
 ### AUTHORITY
-*   **CAPABILITY != AUTHORITY**: The discovery or availability of a capability (such as an MCP tool or OpenAPI endpoint) does not grant permission to invoke it.
-*   **UTILITY_AVAILABLE != UTILITY_PERMITTED**: Capability availability is separate from authority constraints.
-*   **DELEGATION != AUTHORITY_AMPLIFICATION**: Delegated agents or fanned-out task execution receive no more authority than the parent contract allows.
+*   **UTILITY_AVAILABLE != UTILITY_PERMITTED**: The discovery or availability of a capability binding does not grant authority to invoke it.
+*   **DELEGATION != AUTHORITY_AMPLIFICATION**: Delegated agents or fanned-out sub-task execution receive no more authority than the parent contract allows.
+*   **PAST_SUCCESS != CURRENT_AUTHORITY**: Telemetry and historical success rate statistics may optimize choice ranking; they never expand authorization or override Limits.
+*   **EXPERIENCE != POLICY**: Telemetry indexes inform planning priority; Limits enforce hard boundary policy rules.
 *   **AVAILABLE_CREDENTIAL != AUTHORIZED_ACTION**: The runtime resolves the minimum authority required for the exact permitted invocation.
-*   **AMBIENT_CAPABILITY != CONTRACT_CAPABILITY**: Ambient capabilities are separate from contract capabilities.
 
 ### SEMANTICS
-*   **PLAN != CONTRACT**: A proposed execution plan is an ephemeral implementation detail. Only the contract defines the authoritative goal and boundaries.
-*   **MODEL_OUTPUT != POLICY_DECISION**: AI-driven planners suggest candidate steps; authorization and policy boundaries are decided deterministically by the runtime.
-*   **SURFACE_SYNTAX != CANONICAL_SEMANTICS**: The canonical language is the Intermediate Representation (IR). All text formats (like `.glu`) are non-normative projections.
+*   **PLAN != CONTRACT**: A proposed execution plan is an ephemeral implementation detail. Only the contract defines the authoritative Goal and Limits.
+*   **MODEL_OUTPUT != POLICY_DECISION**: AI-driven planners suggest candidate next actions; authorization and Limits enforcement are decided deterministically by the runtime.
+*   **SURFACE_SYNTAX != CANONICAL_SEMANTICS**: The canonical language is the Intermediate Representation (IR). All text formats (like `.glu` or YAML) are non-normative projections.
 *   **SERIALIZATION != LANGUAGE**: The semantic model is the typed relationship graph; serialization formats (JSON, CBOR, etc.) are projections.
-*   **DERIVED_SUBGOAL != CONTRACT_GOAL**: Planner-derived intermediate subgoals are distinct from contract-level goals.
-*   **PLAN_IDENTITY != CONTRACT_IDENTITY**: Plans are disposable runtime products and carry separate identities.
+*   **DERIVED_SUBGOAL != CONTRACT_GOAL**: Planner-derived intermediate subgoals are distinct from contract-level Goals.
+
+### KNOWLEDGE
+*   **KNOWLEDGE != CONTEXT**: Durable capability catalogs and experience telemetry persist across execution runs; reasoning context remains minimal and run-scoped.
+*   **DECLARED_SEMANTICS != OBSERVED_BEHAVIOR**: Declare schemas and contract limits statically; record observed execution anomalies dynamically under separate observed layers.
+*   **INFERENCE != FACT**: Empirical inferences generated by model execution must not silently mutate canonical registry definitions without formal promotion rules.
+
+### CONTEXT
+*   **CONTEXT != SOURCE_OF_TRUTH**: Projected context is discardable, run-scoped, and non-authoritative.
+*   **CONTEXT != PERSISTENCE**: An agent can reason over information in its context window without the runtime assuming permanent custody or storage.
 
 ### EVIDENCE
 *   **EVENT != EVIDENCE**: An event ledger captures telemetry of what was attempted; only evidence provides independent verification of the actual outcome.
-*   **OBSERVATION != POSSESSION**: An agent can observe something without gluless copying it into permanent store.
+*   **OBSERVATION != POSSESSION**: An agent can observe something without gluless copying the underlying database or files into permanent store.
 *   **ACCESS != OWNERSHIP**: The agent having access to data does not mean the runtime acquires ownership of it.
 *   **EXECUTION_LOG != COMPLETION_PROOF**: An execution log captures actions; it does not prove goal satisfaction.
 
 ### STATE
-*   **WORLD_STATE != EXECUTION_STATE**: The gluless runtime holds transient execution state (references, observations, history) but does not duplicate or assume ownership of the world's authoritative domain state (which remains with CRM, Git, Kubernetes, etc.).
-*   **CONTEXT != PERSISTENCE**: An agent can reason over information in its context window without gluless assuming permanent custody of that information.
+*   **WORLD_STATE != EXECUTION_STATE**: The gluless runtime holds transient execution state (references, observations, history) but does not duplicate or assume ownership of the world's authoritative domain state.
+*   **REGISTRY != EXECUTION_STATE**: Registry catalogs capability schemas; runtime ledger tracks transient run states.
 *   **EXECUTOR != OWNER**: gluless governs the invocation and evaluates results; it does not have to own or run the executor.
 
 ### PORTABILITY
-*   **IMPLEMENTATION_LANGUAGE != GLULESS_LANGUAGE**: Runtimes and adapters may use Python, Rust, Go, etc., but the gluless language remains independent of host language types or systems.
-*   **HOST_TYPE_SYSTEM != GLULESS_TYPE_SYSTEM**: Host-language types (Python classes, Rust structs) are generated projections of gluless types, not the defining authority.
+*   **IMPLEMENTATION_LANGUAGE != GLULESS_LANGUAGE**: Runtimes and adapters may use Python, Rust, Go, etc., but the gluless language remains independent of host language types.
+*   **HOST_TYPE_SYSTEM != GLULESS_TYPE_SYSTEM**: Host-language types are generated projections of gluless types, not the defining authority.
 *   **PROTOCOL != SEMANTICS**: OpenAPI, MCP, A2A, gRPC are capability sources or transport protocols; they do not define gluless semantics.
 *   **TRANSPORT != CONTRACT**: The transport is replaceable; the contract remains immutable.
-*   **UTILITY_BINDING != DATA_CUSTODY**: Binding a capability does not imply custody of its processed data.
-*   **DATA_LOCATION != RUNTIME_LOCATION**: Execution location is decoupled from data residency/jurisdiction.
-*   **CAPABILITY_IDENTITY != TRANSPORT_IDENTITY**: Capability identification is distinct from the transport method used to reach it.
 *   **UTILITY != BINDING**: The utility defines capability semantics; the binding defines environment-specific transport details.
+*   **CAPABILITY_IDENTITY != PROVIDER_IDENTITY**: Contracts target logical capability requirements rather than provider-specific endpoint identities.
 
 ### EXECUTION
 *   **PLAN_FAILURE != CONTRACT_FAILURE**: A failed plan does not imply a failed contract; the runtime may resolve alternative paths.
 *   **CONCURRENCY != CONTRACT_SEMANTICS**: Runtimes infer concurrency from dependency independence; scheduling is decoupled from contract declaration.
-*   **SCHEDULING != CONTRACT_SEMANTICS**: The scheduling sequence is derived, not declared (unless timing is part of the Goal or Limits).
+*   **STATELESS_RUNTIME != NO_PERSISTENCE**: Runtimes remain stateless and reconstructable; discovery catalogs and experience indexes may be persistent.
 
 ---
 
@@ -267,8 +326,8 @@ utilities:
 ### 22.3 Utility vs. Binding Separation
 A **Utility** represents a capability atom (e.g. `issue.read`, `deployment.create`) and defines its semantic interface. A **Binding** defines the transport details (e.g., OpenAPI HTTP, MCP, A2A) required to reach that capability in a specific environment. Contracts reference Utilities; runtimes resolve Bindings.
 
-### 22.4 Semantic Capability Selection
-Runtimes support selecting capabilities via semantic queries, preventing tight coupling to provider-specific names:
+### 22.4 Semantic Utility Selection
+Runtimes support selecting utilities via semantic capability queries, preventing tight coupling to provider-specific names:
 ```text
 utilities:
   select(
@@ -322,23 +381,10 @@ gluless ReleaseConvergence {
         MergeRequest("ReleaseGate").merged == true
     }
 
-    invariant {
-        MergeRequest("ReleaseGate").predecessors.all(mr => mr.state == "merged")
-        CI.pipeline("release/v0.1.x").status == "success"
-    }
+    limits {
+        invariant: MergeRequest("ReleaseGate").predecessors.all(mr => mr.state == "merged")
+        invariant: CI.pipeline("release/v0.1.x").status == "success"
 
-    observe {
-        GitLab.MergeRequest
-        GitLab.Pipeline
-    }
-
-    capabilities {
-        GitLab.MergeRequest.inspect
-        GitLab.MergeRequest.merge
-        GitLab.Pipeline.inspect
-    }
-
-    authority {
         allow GitLab.MergeRequest.inspect
         allow GitLab.Pipeline.inspect
         
@@ -350,6 +396,17 @@ gluless ReleaseConvergence {
             when MergeRequest.has_conflicts == true
     }
 
+    observe {
+        GitLab.MergeRequest
+        GitLab.Pipeline
+    }
+
+    utilities {
+        GitLab.MergeRequest.inspect
+        GitLab.MergeRequest.merge
+        GitLab.Pipeline.inspect
+    }
+
     success {
         MergeRequest("ReleaseGate").merged == true
 
@@ -359,76 +416,3 @@ gluless ReleaseConvergence {
         }
     }
 }
-
----
-
-## 25. Persistent Utility Registry & Ephemeral Context Resolver
-
-### 25.1 Philosophy & Separation of Concerns
-To allow runtimes and planners to discover capabilities dynamically without overwhelming context windows, gluless decouples durable knowledge representation from ephemeral reasoning:
-*   **UtilityRegistry**: A persistent, canonical repository of normalized capability interfaces. Cached from OpenAPI specs, GraphQL schemas, or MCP servers.
-*   **ExperienceIndex**: A persistent database tracking empirical telemetry (success rates, latencies, observed side effects) collected across runtimes.
-*   **ContextResolver**: Ephemerally constructs a bounded `ContextProjection` containing only the relevant, ranked utilities, goals, and limits for the planner.
-
-### 25.2 Core Invariants
-Runtimes and specifications must adhere strictly to these first-class GluLess invariants:
-*   `KNOWLEDGE != CONTEXT` (Durable registry knowledge remains separate from ephemeral prompt context)
-*   `CONTEXT != SOURCE_OF_TRUTH` (Projected context is discardable and run-scoped)
-*   `CONTEXT != PERSISTENCE` (Reasoning context is transient and reconstructable)
-*   `DECLARED_SEMANTICS != OBSERVED_BEHAVIOR` (Canonical specs are distinct from empirically observed traits)
-*   `INFERENCE != FACT` (Empirical assumptions require promotion rules before canonical integration)
-*   `PAST_SUCCESS != CURRENT_AUTHORITY` (Prior execution success never grants permissions or overrides limits)
-*   `EXPERIENCE != POLICY` (Telemetry informs planning priority; policy rules enforce boundaries)
-*   `UTILITY != BINDING` (Logical capability interface is decoupled from concrete endpoint binding)
-*   `CAPABILITY_IDENTITY != PROVIDER_IDENTITY` (Contracts depend on logical capability concepts, not provider names)
-*   `REGISTRY != EXECUTION_STATE` (Registry catalogs interfaces; runtime ledger tracks transient run states)
-*   `STATELESS_RUNTIME != NO_PERSISTENCE` (Runtimes are stateless; registries and evidence ledgers are durable)
-
-### 25.3 Execution Model Loop Diagram
-
-The core GluLess execution loop follows this structured data and authority graph:
-
-```text
-                 GLULESS CONTRACT
-            Goal · Limits · Utilities
-                         │
-                         ▼
-                  Context Resolver
-                         │
-            ┌────────────┼────────────┐
-            │            │            │
-      UtilityRegistry Observations ExperienceIndex
-            │            │            │
-            └────────────┼────────────┘
-                         ▼
-                 ContextProjection
-                         │
-                         ▼
-                       Agent
-                         │
-                  candidate action
-                         │
-                         ▼
-                   LimitEvaluator
-                         │
-                         ▼
-                       Binding
-                         │
-                         ▼
-                      Executor
-                         │
-                         ▼
-                  External System
-                         │
-                         ▼
-                      Observer
-                         │
-                         ▼
-                      Evidence
-                    ┌────┴─────┐
-                    │          │
-             GoalEvaluator  ExperienceIndex
-                    │
-                    ▼
-                  Result
-```
