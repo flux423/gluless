@@ -129,7 +129,7 @@ Types include:
 
 ## 5. Identity Model
 
-All actors—including human operators, planner runtimes, and fanned-out specialist agents—must execute under a clear, verifiable identity. Identities are bound to specific cryptographic keys or platform principals and carry semantic names (e.g., `GITLAB_OPERATOR_IDENTITY`).
+All actors—including human operators, planner runtimes, and fanned-out specialist agents—must execute under a clear, verifiable identity. Identities are bound to specific cryptographic keys or platform principals and carry semantic names (e.g., `GITLAB\_OPERATOR\_IDENTITY`).
 
 ---
 
@@ -140,7 +140,7 @@ A **Capability** is a semantic property describing *what* can be achieved (e.g. 
 Example:
 *   **Capability / Goal Requirement:** `issue.read`
 *   **Utility:** `GitLab.Issues.get` (declared schema)
-*   **Binding:** `https://gitlab.example.com/api/v4/projects/{id}/issues/{issue_iid}` (HTTP transport)
+*   **Binding:** `https://gitlab.example.com/api/v4/projects/{id}/issues/{issue\_iid}` (HTTP transport)
 
 ---
 
@@ -157,7 +157,7 @@ Authority is declarative, defining the contract's Limits, and evaluated prior to
 
 ## 8. State Model
 
-The system operates as a state transition machine. Every utility execution takes the system from state $S_n$ to $S_{n+1}$. Transitions are valid only if they conform to the Limits.
+The system operates as a state transition machine. Every utility execution takes the system from state $S\_n$ to $S\_{n+1}$. Transitions are valid only if they conform to the Limits.
 
 ---
 
@@ -224,7 +224,7 @@ When a utility execution step requires approval under its Limits, the runtime pa
 
 ## 18. Failure Semantics
 
-Failure is typed. If a utility invocation fails, the system classifies the failure (e.g., `AUTHORIZATION_DENIED`, `RESOURCE_NOT_FOUND`, `NETWORK_TIMEOUT`) and triggers fallback paths defined in the Limits or execution engine.
+Failure is typed. If a utility invocation fails, the system classifies the failure (e.g., `AUTHORIZATION\_DENIED`, `RESOURCE\_NOT\_FOUND`, `NETWORK\_TIMEOUT`) and triggers fallback paths defined in the Limits or execution engine.
 
 ---
 
@@ -250,51 +250,51 @@ gluless enforces a multi-dimensional Sovereignty Model to protect state, data, a
 All gluless implementations, tools, and runtimes must enforce these invariants at all times, organized by core architectural families:
 
 ### AUTHORITY
-*   **UTILITY_AVAILABLE != UTILITY_PERMITTED**: The discovery or availability of a capability binding does not grant authority to invoke it.
-*   **DELEGATION != AUTHORITY_AMPLIFICATION**: Delegated agents or fanned-out sub-task execution receive no more authority than the parent contract allows.
-*   **PAST_SUCCESS != CURRENT_AUTHORITY**: Telemetry and historical success rate statistics may optimize choice ranking; they never expand authorization or override Limits.
+*   **UTILITY\_AVAILABLE != UTILITY\_PERMITTED**: The discovery or availability of a capability binding does not grant authority to invoke it.
+*   **DELEGATION != AUTHORITY\_AMPLIFICATION**: Delegated agents or fanned-out sub-task execution receive no more authority than the parent contract allows.
+*   **PAST\_SUCCESS != CURRENT\_AUTHORITY**: Telemetry and historical success rate statistics may optimize choice ranking; they never expand authorization or override Limits.
 *   **EXPERIENCE != POLICY**: Telemetry indexes inform planning priority; Limits enforce hard boundary policy rules.
-*   **AVAILABLE_CREDENTIAL != AUTHORIZED_ACTION**: The runtime resolves the minimum authority required for the exact permitted invocation.
+*   **AVAILABLE\_CREDENTIAL != AUTHORIZED\_ACTION**: The runtime resolves the minimum authority required for the exact permitted invocation.
 
 ### SEMANTICS
 *   **PLAN != CONTRACT**: A proposed execution plan is an ephemeral implementation detail. Only the contract defines the authoritative Goal and Limits.
-*   **MODEL_OUTPUT != POLICY_DECISION**: AI-driven planners suggest candidate next actions; authorization and Limits enforcement are decided deterministically by the runtime.
-*   **SURFACE_SYNTAX != CANONICAL_SEMANTICS**: The canonical language is the Intermediate Representation (IR). All text formats (like `.glu` or YAML) are non-normative projections.
+*   **MODEL\_OUTPUT != POLICY\_DECISION**: AI-driven planners suggest candidate next actions; authorization and Limits enforcement are decided deterministically by the runtime.
+*   **SURFACE\_SYNTAX != CANONICAL\_SEMANTICS**: The canonical language is the Intermediate Representation (IR). All text formats (like `.glu` or YAML) are non-normative projections.
 *   **SERIALIZATION != LANGUAGE**: The semantic model is the typed relationship graph; serialization formats (JSON, CBOR, etc.) are projections.
-*   **DERIVED_SUBGOAL != CONTRACT_GOAL**: Planner-derived intermediate subgoals are distinct from contract-level Goals.
+*   **DERIVED\_SUBGOAL != CONTRACT\_GOAL**: Planner-derived intermediate subgoals are distinct from contract-level Goals.
 
 ### KNOWLEDGE
 *   **KNOWLEDGE != CONTEXT**: Durable capability catalogs and experience telemetry persist across execution runs; reasoning context remains minimal and run-scoped.
-*   **DECLARED_SEMANTICS != OBSERVED_BEHAVIOR**: Declare schemas and contract limits statically; record observed execution anomalies dynamically under separate observed layers.
+*   **DECLARED\_SEMANTICS != OBSERVED\_BEHAVIOR**: Declare schemas and contract limits statically; record observed execution anomalies dynamically under separate observed layers.
 *   **INFERENCE != FACT**: Empirical inferences generated by model execution must not silently mutate canonical registry definitions without formal promotion rules.
 
 ### CONTEXT
-*   **CONTEXT != SOURCE_OF_TRUTH**: Projected context is discardable, run-scoped, and non-authoritative.
+*   **CONTEXT != SOURCE\_OF\_TRUTH**: Projected context is discardable, run-scoped, and non-authoritative.
 *   **CONTEXT != PERSISTENCE**: An agent can reason over information in its context window without the runtime assuming permanent custody or storage.
 
 ### EVIDENCE
 *   **EVENT != EVIDENCE**: An event ledger captures telemetry of what was attempted; only evidence provides independent verification of the actual outcome.
 *   **OBSERVATION != POSSESSION**: An agent can observe something without gluless copying the underlying database or files into permanent store.
 *   **ACCESS != OWNERSHIP**: The agent having access to data does not mean the runtime acquires ownership of it.
-*   **EXECUTION_LOG != COMPLETION_PROOF**: An execution log captures actions; it does not prove goal satisfaction.
+*   **EXECUTION\_LOG != COMPLETION\_PROOF**: An execution log captures actions; it does not prove goal satisfaction.
 
 ### STATE
-*   **WORLD_STATE != EXECUTION_STATE**: The gluless runtime holds transient execution state (references, observations, history) but does not duplicate or assume ownership of the world's authoritative domain state.
-*   **REGISTRY != EXECUTION_STATE**: Registry catalogs capability schemas; runtime ledger tracks transient run states.
+*   **WORLD\_STATE != EXECUTION\_STATE**: The gluless runtime holds transient execution state (references, observations, history) but does not duplicate or assume ownership of the world's authoritative domain state.
+*   **REGISTRY != EXECUTION\_STATE**: Registry catalogs capability schemas; runtime ledger tracks transient run states.
 *   **EXECUTOR != OWNER**: gluless governs the invocation and evaluates results; it does not have to own or run the executor.
 
 ### PORTABILITY
-*   **IMPLEMENTATION_LANGUAGE != GLULESS_LANGUAGE**: Runtimes and adapters may use Python, Rust, Go, etc., but the gluless language remains independent of host language types.
-*   **HOST_TYPE_SYSTEM != GLULESS_TYPE_SYSTEM**: Host-language types are generated projections of gluless types, not the defining authority.
+*   **IMPLEMENTATION\_LANGUAGE != GLULESS\_LANGUAGE**: Runtimes and adapters may use Python, Rust, Go, etc., but the gluless language remains independent of host language types.
+*   **HOST\_TYPE\_SYSTEM != GLULESS\_TYPE\_SYSTEM**: Host-language types are generated projections of gluless types, not the defining authority.
 *   **PROTOCOL != SEMANTICS**: OpenAPI, MCP, A2A, gRPC are capability sources or transport protocols; they do not define gluless semantics.
 *   **TRANSPORT != CONTRACT**: The transport is replaceable; the contract remains immutable.
 *   **UTILITY != BINDING**: The utility defines capability semantics; the binding defines environment-specific transport details.
-*   **CAPABILITY_IDENTITY != PROVIDER_IDENTITY**: Contracts target logical capability requirements rather than provider-specific endpoint identities.
+*   **CAPABILITY\_IDENTITY != PROVIDER\_IDENTITY**: Contracts target logical capability requirements rather than provider-specific endpoint identities.
 
 ### EXECUTION
-*   **PLAN_FAILURE != CONTRACT_FAILURE**: A failed plan does not imply a failed contract; the runtime may resolve alternative paths.
-*   **CONCURRENCY != CONTRACT_SEMANTICS**: Runtimes infer concurrency from dependency independence; scheduling is decoupled from contract declaration.
-*   **STATELESS_RUNTIME != NO_PERSISTENCE**: Runtimes remain stateless and reconstructable; discovery catalogs and experience indexes may be persistent.
+*   **PLAN\_FAILURE != CONTRACT\_FAILURE**: A failed plan does not imply a failed contract; the runtime may resolve alternative paths.
+*   **CONCURRENCY != CONTRACT\_SEMANTICS**: Runtimes infer concurrency from dependency independence; scheduling is decoupled from contract declaration.
+*   **STATELESS\_RUNTIME != NO\_PERSISTENCE**: Runtimes remain stateless and reconstructable; discovery catalogs and experience indexes may be persistent.
 
 ---
 
@@ -393,7 +393,7 @@ gluless ReleaseConvergence {
             
         require approval
             for GitLab.MergeRequest.merge 
-            when MergeRequest.has_conflicts == true
+            when MergeRequest.has\_conflicts == true
     }
 
     observe {
@@ -411,8 +411,8 @@ gluless ReleaseConvergence {
         MergeRequest("ReleaseGate").merged == true
 
         evidence {
-            git.commit_exists(MergeRequest.merge_commit_sha)
-            pipeline.passed(MergeRequest.merge_commit_sha)
+            git.commit\_exists(MergeRequest.merge\_commit\_sha)
+            pipeline.passed(MergeRequest.merge\_commit\_sha)
         }
     }
 }

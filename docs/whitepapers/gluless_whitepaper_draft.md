@@ -103,11 +103,11 @@ A Goal should prefer observable postconditions over prescribed steps. Examples i
 ```text
 Deployment(version="2.4.1").status == healthy
 
-Invoice(id="inv_481").state == paid
+Invoice(id="inv\\_481").state == paid
 
 Repository("api").checks.required == passing
 
-Customer("c_92").account.status == activated
+Customer("c\\_92").account.status == activated
 ```
 
 A Goal can include success predicates, acceptable result schemas, deadlines, or confidence requirements, but it should not encode a procedural plan unless the procedure itself is part of the required outcome.
@@ -183,7 +183,7 @@ IDENTITY=
 INPUT=
 OUTPUT=
 AUTHORITY=
-SIDE_EFFECTS=
+SIDE\\_EFFECTS=
 ERRORS=
 VERSION=
 EVIDENCE=
@@ -325,9 +325,9 @@ read
 create
 update
 delete
-external_message
+external\\_message
 financial
-privilege_change
+privilege\\_change
 infrastructure
 unknown
 ```
@@ -341,7 +341,7 @@ An imported API specification or MCP tool can describe itself, but self-descript
 This yields a critical invariant:
 
 ```text
-CAPABILITY_METADATA != AUTHORITY
+CAPABILITY\\_METADATA != AUTHORITY
 ```
 
 The runtime may use metadata for planning. Limits determine whether invocation is permitted.
@@ -376,7 +376,7 @@ To formalize this, GluLess separates the system architecture into three decouple
 
 Rather than reasoning over all raw registry data, the planner is presented with a compiled, ephemeral, non-authoritative working set:
 
-$$\text{CONTEXT} \neq \text{SOURCE_OF_TRUTH}$$
+$$\text{CONTEXT} \neq \text{SOURCE\\_OF\\_TRUTH}$$
 
 The **Context Resolver** compiles this Context Projection dynamically using a strict, two-step pipeline:
 
@@ -403,7 +403,7 @@ This pipeline enforces two non-negotiable resolution rules:
 * **COMPATIBILITY BEFORE OPTIMIZATION**: Telemetry optimization (such as speed or cost) must never override type or environmental compatibility checks.
 * **AUTHORITY BEFORE EXPERIENCE**: Historical success rates and performance metrics can never expand invocation permissions; authority boundaries are always evaluated against Limits first.
 
-$$\text{PAST_SUCCESS} \neq \text{CURRENT_AUTHORITY}$$
+$$\text{PAST\\_SUCCESS} \neq \text{CURRENT\\_AUTHORITY}$$
 
 ---
 
@@ -652,13 +652,13 @@ What proves the result?
 
 Runtimes optimize future capability resolution by gathering invocation facts, without modifying foundation model weights or violating permission boundaries.
 
-$$\text{PAST_SUCCESS} \neq \text{CURRENT_AUTHORITY}$$
+$$\text{PAST\\_SUCCESS} \neq \text{CURRENT\\_AUTHORITY}$$
 
 A utility's historical success rate may influence its priority ranking, but it can never expand its current authorization. Every mutation must pass through the deterministic gate of the contract's Limits prior to execution.
 
 Furthermore, we preserve evidence integrity by keeping declarative specs separate from empirical observations:
 
-$$\text{DECLARED_SEMANTICS} \neq \text{OBSERVED_BEHAVIOR}$$
+$$\text{DECLARED\\_SEMANTICS} \neq \text{OBSERVED\\_BEHAVIOR}$$
 
 Runtimes record anomalies (e.g., latency spikes, unannounced side effects) under distinct observed layers rather than silently mutating canonical declarations.
 
@@ -716,7 +716,7 @@ The architecture of GluLess is governed by a core Sovereignty Model and a strict
 
 The GluLess runtime must never become the authoritative owner of application state. Durable domain state remains under the custody of its respective system of record (e.g., Customer state in CRM, Issue state in Git, Deployment state in Kubernetes). The runtime holds only transient execution state, including the active contract, observation history, and evidence references.
 
-$$\text{WORLD_STATE} \neq \text{EXECUTION_STATE}$$
+$$\text{WORLD\\_STATE} \neq \text{EXECUTION\\_STATE}$$
 
 ### 14.2 Data Sovereignty: Access does not equal Custody
 
@@ -730,7 +730,7 @@ Treating data under authority domains is fundamental. An executing agent having 
 
 GluLess is host-language and protocol agnostic by construction. Host-language abstractions (such as Python classes or Rust structs) are generated projections, never the defining authority of the language.
 
-$$\text{HOST_TYPE_SYSTEM} \neq \text{GLULESS_TYPE_SYSTEM}$$
+$$\text{HOST\\_TYPE\\_SYSTEM} \neq \text{GLULESS\\_TYPE\\_SYSTEM}$$
 
 Similarly, capabilities and transport are decoupled from the core contract semantics:
 
@@ -743,27 +743,27 @@ To preserve these boundaries under autonomous agent execution, the runtime enfor
 
 *   **AUTHORITY**:
     *   $\text{CAPABILITY} \neq \text{AUTHORITY}$
-    *   $\text{UTILITY_AVAILABLE} \neq \text{UTILITY_PERMITTED}$
-    *   $\text{DELEGATION} \neq \text{AUTHORITY_AMPLIFICATION}$
+    *   $\text{UTILITY\\_AVAILABLE} \neq \text{UTILITY\\_PERMITTED}$
+    *   $\text{DELEGATION} \neq \text{AUTHORITY\\_AMPLIFICATION}$
 *   **SEMANTICS**:
     *   $\text{PLAN} \neq \text{CONTRACT}$
-    *   $\text{MODEL_OUTPUT} \neq \text{POLICY_DECISION}$
-    *   $\text{SURFACE_SYNTAX} \neq \text{CANONICAL_SEMANTICS}$
+    *   $\text{MODEL\\_OUTPUT} \neq \text{POLICY\\_DECISION}$
+    *   $\text{SURFACE\\_SYNTAX} \neq \text{CANONICAL\\_SEMANTICS}$
 *   **EVIDENCE**:
     *   $\text{EVENT} \neq \text{EVIDENCE}$
     *   $\text{OBSERVATION} \neq \text{POSSESSION}$
     *   $\text{ACCESS} \neq \text{OWNERSHIP}$
 *   **STATE**:
-    *   $\text{WORLD_STATE} \neq \text{EXECUTION_STATE}$
+    *   $\text{WORLD\\_STATE} \neq \text{EXECUTION\\_STATE}$
     *   $\text{CONTEXT} \neq \text{PERSISTENCE}$
     *   $\text{EXECUTOR} \neq \text{OWNER}$
 *   **PORTABILITY**:
-    *   $\text{IMPLEMENTATION_LANGUAGE} \neq \text{GLULESS_LANGUAGE}$
-    *   $\text{HOST_TYPE_SYSTEM} \neq \text{GLULESS_TYPE_SYSTEM}$
+    *   $\text{IMPLEMENTATION\\_LANGUAGE} \neq \text{GLULESS\\_LANGUAGE}$
+    *   $\text{HOST\\_TYPE\\_SYSTEM} \neq \text{GLULESS\\_TYPE\\_SYSTEM}$
     *   $\text{PROTOCOL} \neq \text{SEMANTICS}$
     *   $\text{TRANSPORT} \neq \text{CONTRACT}$
-    *   $\text{UTILITY_BINDING} \neq \text{DATA_CUSTODY}$
-    *   $\text{DATA_LOCATION} \neq \text{RUNTIME_LOCATION}$
+    *   $\text{UTILITY\\_BINDING} \neq \text{DATA\\_CUSTODY}$
+    *   $\text{DATA\\_LOCATION} \neq \text{RUNTIME\\_LOCATION}$
 
 ---
 
@@ -790,7 +790,7 @@ $$\text{UTILITY} \neq \text{BINDING}$$
 
 Runtimes support semantic query selection rather than explicit endpoint enumeration. Planners query the capability space (e.g., selecting utilities that match a domain and carry specific side-effect limits), allowing the runtime to substitute equivalent providers dynamically:
 
-$$\text{CAN_SATISFY}(\text{required_capability}, \text{candidate_utility})$$
+$$\text{CAN\\_SATISFY}(\text{required\\_capability}, \text{candidate\\_utility})$$
 
 ### 15.4 Next-Valid-Action Reasoning and Disposable Plans
 
@@ -800,8 +800,8 @@ $$\text{Observe} \rightarrow \text{Propose} \rightarrow \text{Typecheck} \righta
 
 This loop repeats dynamically until the Goal evaluates to satisfied. Plans are disposable runtime artifacts:
 
-$$\text{PLAN_IDENTITY} \neq \text{CONTRACT_IDENTITY}$$
-$$\text{PLAN_FAILURE} \neq \text{CONTRACT_FAILURE}$$
+$$\text{PLAN\\_IDENTITY} \neq \text{CONTRACT\\_IDENTITY}$$
+$$\text{PLAN\\_FAILURE} \neq \text{CONTRACT\\_FAILURE}$$
 
 A failed or discarded plan does not imply a failed contract; the runtime remains free to re-plan or resolve alternative paths.
 
@@ -1326,11 +1326,11 @@ DELETE
 Before creating a new runtime subsystem:
 
 ```text
-DOES_STANDARD_EXIST=
-DOES_PROTOCOL_EXIST=
-DOES_LIBRARY_EXIST=
-DOES_API_EXIST=
-CAN_EXISTING_OWNER_BE_EXTENDED=
+DOES\\_STANDARD\\_EXIST=
+DOES\\_PROTOCOL\\_EXIST=
+DOES\\_LIBRARY\\_EXIST=
+DOES\\_API\\_EXIST=
+CAN\\_EXISTING\\_OWNER\\_BE\\_EXTENDED=
 ```
 
 This is not merely an engineering style preference. It protects the project thesis.
@@ -1470,9 +1470,9 @@ For mutations:
 
 ```text
 AUTHORITY=
-SIDE_EFFECT=
-STATE_BEFORE=
-STATE_AFTER=
+SIDE\\_EFFECT=
+STATE\\_BEFORE=
+STATE\\_AFTER=
 EVIDENCE=
 ```
 

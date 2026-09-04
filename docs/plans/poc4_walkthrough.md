@@ -11,7 +11,7 @@ I have successfully updated the documentation to eliminate duplicate conceptual 
 *   Deleted the duplicate Section 25 from the end of the file.
 
 ### 2. Whitepaper Realignment
-*   Updated Section 6 in [gluless_whitepaper_draft.md](file:///Users/flux423/Sites/blueflyio/Gluless/docs/whitepapers/gluless_whitepaper_draft.md) to formally outline the **Three-Plane Division** (Contract Plane, Knowledge Plane, Execution Plane).
+*   Updated Section 6 in [gluless\_whitepaper\_draft.md](file:///Users/flux423/Sites/blueflyio/Gluless/docs/whitepapers/gluless\_whitepaper\_draft.md) to formally outline the **Three-Plane Division** (Contract Plane, Knowledge Plane, Execution Plane).
 *   Detailed the Resolver selection process:
     1.  **Deterministic Filter**: `TYPE` → `CAPABILITY` → `LIMITS` → `ENVIRONMENT` → `VERSION`.
     2.  **Empirical Rank**: `SEMANTIC RELEVANCE` → `GOAL CONTRIBUTION` → `RELIABILITY` → `LATENCY` → `COST` → `EVIDENCE QUALITY`.

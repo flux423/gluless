@@ -67,12 +67,12 @@ DELETE
 
 Before creating anything new, answer:
 ```text
-DOES_API_EXIST=
-DOES_SERVICE_EXIST=
-DOES_SHARED_COMPONENT_EXIST=
-DOES_GAS_CITY_CAPABILITY_EXIST=
-DOES_STANDARD_OR_PROTOCOL_EXIST=
-CAN_EXISTING_OWNER_BE_EXTENDED=
+DOES\_API\_EXIST=
+DOES\_SERVICE\_EXIST=
+DOES\_SHARED\_COMPONENT\_EXIST=
+DOES\_GAS\_CITY\_CAPABILITY\_EXIST=
+DOES\_STANDARD\_OR\_PROTOCOL\_EXIST=
+CAN\_EXISTING\_OWNER\_BE\_EXTENDED=
 ```
 
 If yes, use it. If incomplete, extend it. Only create something new when a real gap is proven.
@@ -105,7 +105,7 @@ Utilities should expose clear contracts:
 INPUT=
 OUTPUT=
 AUTHORITY=
-SIDE_EFFECTS=
+SIDE\_EFFECTS=
 ERRORS=
 VERSION=
 ```
@@ -162,9 +162,9 @@ Completion requires proof. For each task report, you must include the following 
 ```text
 GOAL=
 UTILITY=
-LIMITS_CHECKED=
+LIMITS\_CHECKED=
 REQUEST=
-REAL_RESPONSE=
+REAL\_RESPONSE=
 TEST=
 RESULT=
 EVIDENCE=
@@ -173,17 +173,17 @@ EVIDENCE=
 ### For mutations:
 ```text
 AUTHORITY=
-SIDE_EFFECT=
-STATE_BEFORE=
-STATE_AFTER=
+SIDE\_EFFECT=
+STATE\_BEFORE=
+STATE\_AFTER=
 EVIDENCE=
 ```
 
 ### For streams:
 ```text
 CONNECTED=
-EVENT_RECEIVED=
-EVENT_RENDERED=
+EVENT\_RECEIVED=
+EVENT\_RENDERED=
 RECONNECT=
 ```
 

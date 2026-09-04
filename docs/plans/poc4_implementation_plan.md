@@ -15,7 +15,7 @@ This plan details the steps required to align the GluLess specification and whit
 *   **Invariant Families**: Group invariants under explicit families (`AUTHORITY`, `SEMANTICS`, `KNOWLEDGE`, `CONTEXT`, `EVIDENCE`, `STATE`, `PORTABILITY`, `EXECUTION`) rather than enforcing a fixed count.
 *   **Terminology Pass**: Replace outdated terminology (`Capability Graph`, `capability interface`, etc.) with `Utility`, `Binding`, `ContextProjection`, `LimitEvaluator` definitions.
 
-### 2. Update the Whitepaper (`docs/whitepapers/gluless_whitepaper_draft.md`)
+### 2. Update the Whitepaper (`docs/whitepapers/gluless\_whitepaper\_draft.md`)
 *   **Renumber Subsections**: Programmatically renumber all subsections (e.g. `### 14.1` under `## 3.` becomes `### 3.1`, etc.).
 *   **Three Planes Division**: Explicitly introduce the Contract plane, Knowledge plane, and Execution plane division early in the draft.
 *   **Resolver Filtering Sequence**: Tighten the resolution rules in the Resolver/Registry section to detail:

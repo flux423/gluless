@@ -47,7 +47,7 @@ Instead of:
 
 ```python
 response = requests.get("/v0/cities")
-response.raise_for_status()
+response.raise\_for\_status()
 cities = response.json()
 
 for city in cities:
@@ -68,7 +68,7 @@ goal BluCityHealthy {
         require approval for GasCity.sessions.restart
 
         never expose secrets
-        preserve active_work
+        preserve active\_work
 
     utilities:
         GasCity.health
@@ -391,7 +391,7 @@ Human approval is a first-class execution state.
 An execution may enter:
 
 ```text
-WAITING_FOR_APPROVAL
+WAITING\_FOR\_APPROVAL
 ```
 
 with:
@@ -618,11 +618,11 @@ Required proof:
 ```text
 PARSE=PASS
 TYPECHECK=PASS
-UTILITY_IMPORT=PASS
-UTILITY_RESOLUTION=PASS
-HTTP_EXECUTION=PASS
-RESPONSE_VALIDATION=PASS
-GOAL_EVALUATION=PASS
+UTILITY\_IMPORT=PASS
+UTILITY\_RESOLUTION=PASS
+HTTP\_EXECUTION=PASS
+RESPONSE\_VALIDATION=PASS
+GOAL\_EVALUATION=PASS
 EVENTS=PASS
 EVIDENCE=PASS
 RESULT=PASS
@@ -648,12 +648,12 @@ DELETE
 Before adding code, ask:
 
 ```text
-DOES_STANDARD_EXIST=
-DOES_PROTOCOL_EXIST=
-DOES_LIBRARY_EXIST=
-DOES_API_EXIST=
-DOES_SHARED_OWNER_EXIST=
-CAN_EXISTING_OWNER_BE_EXTENDED=
+DOES\_STANDARD\_EXIST=
+DOES\_PROTOCOL\_EXIST=
+DOES\_LIBRARY\_EXIST=
+DOES\_API\_EXIST=
+DOES\_SHARED\_OWNER\_EXIST=
+CAN\_EXISTING\_OWNER\_BE\_EXTENDED=
 ```
 
 Only create something new after a real gap is established.
