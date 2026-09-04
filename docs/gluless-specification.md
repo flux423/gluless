@@ -359,4 +359,21 @@ gluless ReleaseConvergence {
         }
     }
 }
-```
+
+---
+
+## 25. Persistent Utility Registry & Ephemeral Context Resolver
+
+### 25.1 Philosophy & Separation of Concerns
+To allow runtimes and planners to discover capabilities dynamically without overwhelming context windows, gluless decouples durable knowledge representation from ephemeral reasoning:
+*   **UtilityRegistry**: A persistent, canonical repository of normalized capability interfaces. Cached from OpenAPI specs, GraphQL schemas, or MCP servers.
+*   **ExperienceIndex**: A persistent database tracking empirical telemetry (success rates, latencies, observed side effects) collected across runtimes.
+*   **ContextResolver**: Ephemerally constructs a bounded `ContextProjection` containing only the relevant, ranked utilities, goals, and limits for the planner.
+
+### 25.2 Core Invariants
+1.  `KNOWLEDGE != CONTEXT`: Durable registry metadata persists across runs; agent prompt context remains ephemeral and minimal.
+2.  `CONTEXT != SOURCE_OF_TRUTH`: Projected context is discardable and run-scoped.
+3.  `DECLARED_SEMANTICS != OBSERVED_BEHAVIOR`: Declare schemas and contracts statically; record observed execution anomalies dynamically.
+4.  `PAST_SUCCESS != CURRENT_AUTHORITY`: Experience metrics optimize capability choice; they never expand permissions.
+5.  `UTILITY != BINDING`: A utility represents a logical capability; a binding maps to its target HTTP, gRPC, or MCP endpoint.
+6.  `STATELESS_RUNTIME != NO_PERSISTENCE`: The runtime remains stateless and reconstructable; discovery catalogs and experience indexes may be persistent.

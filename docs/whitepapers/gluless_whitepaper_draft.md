@@ -1441,6 +1441,37 @@ It becomes an executable contract model for autonomous software.
 
 ---
 
+## 34. Persistent Utility Registries & Ephemeral Context Projections
+
+To execute scaling agentic workloads efficiently, runtimes must not flood prompt context windows with large lists of raw tool specifications or thousands of API endpoints. Doing so degrades reasoning quality and inflates cost.
+
+$$\text{KNOWLEDGE} \neq \text{CONTEXT}$$
+
+To formalize this distinction, GluLess implements a decoupled knowledge architecture:
+1.  **Durable Utility Registry**: A persistent catalog that normalizes capabilities imported from OpenAPI, MCP, GraphQL, or A2A. Instead of planning against raw documents, agents query this structured plane.
+2.  **Durable Experience Index**: Tracks invocation latencies, error frequencies, and goal achievements across execution cycles.
+3.  **Ephemeral Context Resolver**: Evaluates contract goals and active limits against the registry. It filters out denied utilities, ranks allowed utilities based on telemetry, and projects a minimal working set for the planner.
+
+$$\text{CONTEXT} \neq \text{SOURCE_OF_TRUTH}$$
+
+---
+
+## 35. Empirical Feedback Loops & Experience Indexing
+
+Runtimes optimize future capability resolution by gathering invocation facts, without modifying foundation model weights or violating permission boundaries.
+
+$$\text{PAST_SUCCESS} \neq \text{CURRENT_AUTHORITY}$$
+
+An operation's historical success rate may influence its priority ranking, but it can never expand its current authorization. Every mutation must pass through the deterministic gate of the contract's Limits prior to execution.
+
+Furthermore, we preserve evidence integrity by keeping declarative specs separate from empirical observations:
+
+$$\text{DECLARED_SEMANTICS} \neq \text{OBSERVED_BEHAVIOR}$$
+
+Runtimes record anomalies (e.g., latency spikes, unannounced side effects) under distinct observed layers rather than silently mutating canonical declarations.
+
+---
+
 # References and primary sources
 
 [1] OpenAPI Initiative. *OpenAPI Specification v3.1.1.* https://spec.openapis.org/oas/v3.1.1.html
