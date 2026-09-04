@@ -1,0 +1,92 @@
+openapi: 3.0.3
+info:
+  title: GasCity API
+  description: The API endpoints for managing the GasCity agent platform and deployment rigs.
+  version: 0.1.0
+x-provider-name: GasCity
+servers:
+  - url: http://localhost:8000/v0
+    description: Local development server
+paths:
+  /cities:
+    get:
+      summary: List all cities
+      description: Returns a list of all cities registered in the GasCity network.
+      operationId: listCities
+      responses:
+        '200':
+          description: A list of cities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/City'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /sessions/{id}/nudge:
+    post:
+      summary: Nudge a session
+      description: Request a session nudge or restart by session ID.
+      operationId: nudgeSession
+      parameters:
+        - name: id
+          in: path
+          description: The unique identifier of the session.
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: Parameters for nudging the session.
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  description: Force nudge even if the session has active tasks.
+                  default: false
+      responses:
+        '200':
+          description: Successful nudge operation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: nudged
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          description: Session not found
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-GasCity-Token
+
+  responses:
+    UnauthorizedError:
+      description: API key is missing or invalid
+
+  schemas:
+    City:
+      type: object
+      required:
+        - name
+        - health
+      properties:
+        name:
+          type: string
+          example: blucity
+        health:
+          type: string
+          enum: [healthy, degraded, down]
+          example: healthy
