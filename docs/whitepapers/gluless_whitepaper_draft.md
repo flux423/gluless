@@ -1,16 +1,9 @@
 # GluLess
+
 ## An Agent-Native Executable Contract Language and Runtime
 
-**Draft 0.1 — Research Whitepaper**  
-**September 2026**
-
-> **GLU = Goal · Limits · Utilities**  
-> **The contract is the program.**  
-> **No glue required.**
-
----
-
 ## Abstract
+
 
 Software systems have spent decades improving how humans specify procedures. Agentic systems introduce a different execution problem: an intelligent runtime can choose procedures, but it still needs a precise contract for what outcome is required, what actions are permitted, what capabilities exist, and what evidence proves completion.
 
@@ -22,7 +15,9 @@ This paper surveys adjacent technologies, defines the architectural gap GluLess 
 
 ---
 
+
 ## 1. The shift: from procedure specification to governed outcome execution
+
 
 Traditional programming languages assume that the author provides the procedure. The runtime decides how to interpret machine-level details, but the program generally fixes the control flow: call this function, branch on this condition, iterate this collection, write this state.
 
@@ -93,7 +88,9 @@ The result is not a “language for prompting an LLM.” It is a runtime contrac
 
 ---
 
+
 ## 2. GLU: the minimal semantic model
+
 
 GluLess starts with three top-level ideas rather than syntax constructs inherited from general-purpose programming languages.
 
@@ -196,357 +193,9 @@ The runtime should care about the capability contract, not whether the implement
 
 ---
 
-## 3. What already exists — and why GluLess should reuse it
 
-A defensible GluLess architecture begins by refusing to recreate solved layers.
+## 3. The canonical IR is the language
 
-The most relevant standards and systems fall into several categories:
-
-1. **Capability/interface description** — OpenAPI, JSON Schema, GraphQL, gRPC, MCP.
-2. **Agent interoperability** — A2A.
-3. **Agent/frontend interaction** — AG-UI.
-4. **Policy and authorization** — Cedar, OPA/Rego.
-5. **Durable orchestration** — Temporal, AWS Step Functions, LangGraph.
-6. **Desired-state configuration** — Terraform and controller/reconciliation patterns.
-7. **Planning languages** — PDDL and related automated planning formalisms.
-8. **Events and provenance** — CloudEvents, W3C PROV and tracing systems.
-
-None of these categories should be treated as competitors by default. They are potential implementation owners beneath or beside GluLess.
-
----
-
-## 4. OpenAPI: a strong Utility source, not an execution contract
-
-The OpenAPI Specification defines a language-agnostic description of HTTP API surfaces. Its primary value to GluLess is obvious: it already provides machine-readable operations, parameters, request bodies, response schemas, security schemes, servers, and error surfaces. An agent runtime should not require a bespoke wrapper around every REST API when a valid OpenAPI document already exists.[1]
-
-Conceptually:
-
-```text
-OpenAPI Operation
-      ↓ import
-Typed GluLess Utility
-```
-
-A GluLess importer can derive:
-
-```text
-utility.id        <- operationId or canonical operation identity
-utility.input     <- parameters + request body schema
-utility.output    <- response schema(s)
-utility.transport <- HTTP method + path + server metadata
-utility.auth      <- referenced security requirements
-utility.errors    <- non-success responses
-```
-
-The missing semantics are equally important. OpenAPI does not define the caller’s Goal, the runtime’s policy for selecting one operation over another, cross-operation authority, approval requirements, execution budgets, global invariants, or what evidence is sufficient to establish contract-level success.
-
-Therefore:
-
-> **OpenAPI should become a Utility source inside GluLess, not a dialect GluLess replaces.**
-
-This is an example of the project’s decision order: reuse the interface standard, add only the execution-contract semantics that are absent.
-
----
-
-## 5. MCP: capability exchange is becoming standardized
-
-The Model Context Protocol defines a client-host-server architecture for connecting model applications with resources, prompts, and tools. Its specification also includes capability negotiation, lifecycle behavior, logging, progress, cancellation, authorization support for HTTP transports, and increasingly explicit task semantics.[2][3]
-
-For GluLess, MCP is important because it makes a large category of agent capability discoverable through a standard protocol.
-
-Conceptually:
-
-```text
-MCP tool → Utility
-MCP resource → readable Utility/resource binding
-MCP task → long-running Utility execution surface
-```
-
-MCP also demonstrates an architectural principle GluLess should preserve: **capability availability and capability authorization are separate concerns**. MCP advertises what a server can do, but the protocol’s own security guidance makes clear that implementers still need access controls, consent/authorization flows, validation, and auditing.[3]
-
-That separation aligns closely with GLU:
-
-```text
-Utilities = what can be invoked
-Limits    = whether a particular invocation is allowed
-```
-
-However, MCP is not itself a contract language for declaring an end-state across multiple capabilities. Its primary unit is protocol interaction with a server capability. A GluLess runtime can therefore consume MCP without attempting to absorb or fork it.
-
----
-
-## 6. A2A: inter-agent protocol, not agent program semantics
-
-The Agent2Agent protocol addresses interoperability among independent agent systems. Its current specification centers on capability discovery, tasks, messages, artifacts, streaming, and secure exchange without requiring one agent to expose its internal memory or implementation.[4]
-
-This is exactly the sort of protocol GluLess should compose with.
-
-A2A can answer:
-
-```text
-How do I discover another agent?
-How do I send it work?
-How is task state represented?
-How are messages and artifacts exchanged?
-```
-
-GluLess must answer different questions:
-
-```text
-Why is this task being executed?
-What outcome is required?
-What Limits govern delegation?
-Is delegation to this agent authorized?
-What evidence from the delegated task satisfies the parent Goal?
-```
-
-A2A therefore maps naturally to the Utility layer:
-
-```text
-A2A Agent Card / capability
-        ↓
-      Utility
-        ↓
-A2A task execution
-```
-
-Delegation should not erase the parent contract’s Limits. A remote agent can choose its internal plan, but the GluLess runtime must preserve authority, budget, and evidence requirements across the boundary.
-
----
-
-## 7. AG-UI: observability and interaction at the frontend boundary
-
-AG-UI is an event-based protocol for connecting agents to user-facing applications. It standardizes lifecycle events, streamed messages, tool-call events, state snapshots and deltas, and other structures used to synchronize an agent runtime with a frontend.[5]
-
-Even though GluLess is agent-native rather than human-interface-native, AG-UI remains valuable because a runtime needs an external observation surface. The important reuse pattern is:
-
-```text
-GluLess execution state/event
-        ↓ adapter
-      AG-UI
-        ↓
-observer / frontend
-```
-
-GluLess should not invent a new browser transport or UI synchronization protocol merely to show execution progress. It should emit a canonical internal event model and adapt that model to existing standards such as AG-UI, SSE, WebSocket, or CloudEvents depending on the boundary.
-
-This keeps GluLess focused on contract semantics rather than presentation.
-
----
-
-## 8. Cedar and OPA/Rego: policy is a component of Limits
-
-Cedar and Open Policy Agent solve important pieces of the Limits problem.
-
-Cedar is designed for authorization decisions based on principals, actions, resources, context, and policy. Its evaluation model is deterministic, with explicit permit/forbid behavior and default denial when no policy grants a request.[6]
-
-OPA uses the declarative Rego language to evaluate policy over structured data. It is widely applicable to admission control, authorization, configuration, and other policy decisions.[7]
-
-GluLess should not invent a full policy engine if Cedar or OPA can own the required rule semantics.
-
-A useful architecture is:
-
-```text
-GluLess Limit
-    ↓ compile/map
-Policy decision request
-    ↓
-Cedar / OPA / native deterministic evaluator
-    ↓
-allow | deny | require approval | constraints
-```
-
-But Limits are broader than authorization alone. A contract may need to express:
-
-- spend ceilings,
-- execution deadlines,
-- maximum attempts,
-- mandatory evidence,
-- model restrictions,
-- data residency constraints,
-- irreversible-action approvals,
-- invariants that must remain true throughout execution.
-
-Some of those can be delegated to existing policy engines; others belong to runtime accounting or contract validation.
-
-The correct GluLess design is therefore **compositional**: reuse mature policy evaluators where their semantics fit, and keep the GluLess Limit model general enough to bind several enforcement mechanisms under one contract.
-
----
-
-## 9. Temporal, Step Functions, and LangGraph: execution engines are not the contract
-
-Temporal provides durable workflow execution that can resume through crashes and infrastructure failures.[8] AWS Step Functions defines workflows as state machines using Amazon States Language.[9] LangGraph provides a graph-based orchestration runtime with durable execution, state persistence, streaming, and human-in-the-loop mechanisms.[10]
-
-These systems solve execution reliability and orchestration extremely well. GluLess should not recreate a durable workflow engine merely to demonstrate agent execution.
-
-The distinction is control flow.
-
-In a conventional workflow system, the workflow author generally defines the graph or sequence:
-
-```text
-A → B → choice → C or D → E
-```
-
-In GluLess, the authored contract can leave the execution path open:
-
-```text
-Goal    = state E is true
-Limits  = actions X/Y forbidden, spend <= N, approval before Z
-Utilities = {A, B, C, D, Z, ...}
-```
-
-The planner may construct different valid paths at runtime.
-
-That means GluLess can use Temporal or another durable runtime beneath its executor while retaining a different programming model above it:
-
-```text
-GluLess Contract
-      ↓
-Planner chooses permitted plan
-      ↓
-Execution adapter
-      ↓
-Temporal / Step Functions / other runtime
-```
-
-LangGraph is closer to agentic execution because nodes may contain model reasoning and dynamic routing, but the graph remains an orchestration structure created by the application. GluLess aims to make **Goal + Limits + Utilities** the authored semantic core and allow graph structure to be a runtime product when appropriate.
-
----
-
-## 10. Terraform and reconciliation: Goal has a useful precedent
-
-Terraform’s language is declarative: it describes intended infrastructure rather than the imperative sequence used to create it.[11] Kubernetes-style controllers similarly operate through reconciliation between current and desired state.
-
-This is one of the strongest precedents for the Goal concept.
-
-The analogy is valuable but incomplete.
-
-Desired-state infrastructure systems usually operate inside a bounded domain with providers, resources, dependency graphs, and relatively deterministic reconciliation semantics. Agentic Goals may span heterogeneous APIs, external agents, uncertain observations, semantic interpretation, and multiple acceptable solution paths.
-
-GluLess can borrow several principles:
-
-- compare observed state to desired state;
-- make convergence explicit;
-- preserve idempotency where possible;
-- separate plan from desired state;
-- record state transitions;
-- detect drift;
-- avoid treating a single successful API call as proof of Goal satisfaction.
-
-But GluLess must add first-class authority and capability semantics because an intelligent planner can discover and select actions across a much broader surface.
-
----
-
-## 11. PDDL: planning theory is relevant, but GluLess should not become a planner language
-
-The Planning Domain Definition Language (PDDL) represents planning domains using predicates, actions, preconditions, effects, and problem goals. It is a major historical precedent for separating a desired goal from the planner that searches for an action sequence.[12]
-
-The conceptual overlap with GluLess is real:
-
-```text
-PDDL domain actions      ~ Utilities
-PDDL preconditions       ~ Utility applicability / state constraints
-PDDL effects             ~ declared Utility effects
-PDDL problem goal        ~ Goal
-planner                  ~ GluLess planning component
-```
-
-However, PDDL assumes a formal planning domain whose actions and effects are modeled sufficiently for symbolic planning. Real API ecosystems rarely offer that completeness. Side effects can be partial, externally observable, delayed, probabilistic, undocumented, or dependent on opaque services.
-
-GluLess should therefore learn from automated planning without requiring every Utility to become a fully formal action model.
-
-A pragmatic Utility can expose increasing levels of semantic richness:
-
-```text
-Level 0: typed input/output
-Level 1: side-effect classification
-Level 2: preconditions / postconditions
-Level 3: cost / latency / risk metadata
-Level 4: formal effects suitable for deterministic planning
-```
-
-The runtime can exploit richer metadata when available and fall back to AI-assisted planning plus observation when it is not.
-
-This graded model is more compatible with existing APIs than requiring the ecosystem to rewrite itself in a planning formalism.
-
----
-
-## 12. CloudEvents and provenance: evidence must be structured
-
-CloudEvents standardizes a common envelope for event data, improving interoperability across event producers and infrastructure.[13] W3C provenance models provide another useful conceptual vocabulary for relating entities, activities, and agents.
-
-GluLess should distinguish **events** from **evidence**.
-
-An event says something happened:
-
-```text
-UtilityInvocationStarted
-UtilityInvocationSucceeded
-ApprovalRequested
-ApprovalGranted
-GoalEvaluationCompleted
-```
-
-Evidence is a durable object used to substantiate a claim:
-
-```text
-HTTP response + digest
-signed artifact
-validated state observation
-repository commit id
-deployment revision
-policy decision record
-test result
-external receipt
-```
-
-A run may emit many events but still lack sufficient evidence to prove the Goal.
-
-This distinction prevents a common agent-system failure mode: equating internal narration or tool-call logs with successful external state change.
-
----
-
-## 13. The gap: a typed contract across layers
-
-The research landscape suggests that no single adjacent standard owns all of the following as one executable unit:
-
-```text
-1. an outcome that must become true
-2. authority and constraints governing all execution paths
-3. discoverable typed capabilities
-4. planner freedom to choose among permitted paths
-5. deterministic enforcement before mutations
-6. observable execution events
-7. evidence bound to effects and results
-8. deterministic evaluation of contract completion where possible
-```
-
-This is the GluLess gap.
-
-The product thesis is **not** that every individual element is new. Most are not. The thesis is that agentic systems need a canonical execution contract that composes these concerns without reducing them to prompt text or hard-coded orchestration graphs.
-
-### 13.1 Comparison matrix
-
-| System / standard | Goal semantics | Limits / policy | Capability description | Dynamic agent planning | Durable execution | Events | Evidence as completion proof |
-|---|---|---|---|---|---|---|---|
-| OpenAPI | No | API security metadata only | Strong for HTTP | No | No | No | No |
-| MCP | Task/tool scoped | Transport/auth + host policy guidance | Strong for MCP capabilities | Model may select tools | Emerging task support | Progress/logging | Not contract-level |
-| A2A | Task objective/message | Protocol security | Agent capabilities | Remote agent internal | Task lifecycle | Streaming/task state | Artifacts, but not parent contract proof |
-| AG-UI | No | No | Tool/event surface | Observes agent | No | Strong UI event model | No |
-| Cedar | No | Strong authorization | No | No | No | Decision diagnostics | Policy decision only |
-| OPA/Rego | Desired policy decisions | Strong policy | No | No | No | Via integrations | Policy decision only |
-| Temporal | Workflow completion | App-defined | Activities | App-defined | Strong | Strong history | Workflow result/history |
-| Step Functions | State-machine terminal state | IAM + app rules | Service integrations | Limited to authored graph | Strong | Strong | Workflow state/history |
-| LangGraph | Application-defined | Application-defined | Tools/nodes | Strong within graph | Strong | Streaming/tracing | App-defined |
-| Terraform | Strong desired state | Provider/IAM outside language | Providers/resources | Deterministic planning | Apply/reconcile | Plan/apply logs | State + provider observation |
-| PDDL | Strong formal goal | Constraints possible, not authority-centric | Formal actions | Strong planner model | Planner-dependent | Not primary | State satisfaction |
-| **GluLess target** | **First-class** | **First-class** | **Imports existing standards** | **First-class** | **Delegated/reused** | **Canonical + adapters** | **First-class** |
-
-The most important column is the last one. GluLess treats evidence not as optional telemetry, but as part of the execution contract.
-
----
-
-## 14. The canonical IR is the language
 
 The human-readable syntax should not be the normative core of GluLess.
 
@@ -622,7 +271,9 @@ Canonicalization becomes especially important if approvals or delegated executio
 
 ---
 
-## 15. Utility model: import, normalize, enrich
+
+## 4. Utility model: import, normalize, enrich
+
 
 The strongest MVP route is to make an existing API operation executable as a typed Utility with minimal glue.
 
@@ -697,7 +348,35 @@ The runtime may use metadata for planning. Limits determine whether invocation i
 
 ---
 
-## 16. Limits as executable governance
+
+## 5. Utility / Binding Separation
+
+As the Utility Registry expands to encompass fanned-out capability providers, coupling a semantic Utility directly to a transport implementation creates substantial coordination debt. GluLess solves this by formally decoupling Utility interfaces from concrete execution Bindings:
+
+1. **Utility (Logical Interface)**: Declares the semantic capability concerns (e.g., `issue.read`), the input/output schemas, and declared side effects.
+2. **Binding (Concrete Transport)**: Defines the transport mechanism (e.g., GitLab REST, GitHub GraphQL, local MCP tool execution, or repository A2A agent invocation) along with server endpoints and parameter maps.
+
+This separation enables planners to select capabilities purely based on semantic identity without coupling the resulting contract to specific provider protocols.
+
+## 6. Persistent Utility Registries & Ephemeral Context Projections
+
+
+To execute scaling agentic workloads efficiently, runtimes must not flood prompt context windows with large lists of raw tool specifications or thousands of API endpoints. Doing so degrades reasoning quality and inflates cost.
+
+$$\text{KNOWLEDGE} \neq \text{CONTEXT}$$
+
+To formalize this distinction, GluLess implements a decoupled knowledge architecture:
+1.  **Durable Utility Registry**: A persistent catalog that normalizes capabilities imported from OpenAPI, MCP, GraphQL, or A2A. Instead of planning against raw documents, agents query this structured plane.
+2.  **Durable Experience Index**: Tracks invocation latencies, error frequencies, and goal achievements across execution cycles.
+3.  **Ephemeral Context Resolver**: Evaluates contract goals and active limits against the registry. It filters out denied utilities, ranks allowed utilities based on telemetry, and projects a minimal working set for the planner.
+
+$$\text{CONTEXT} \neq \text{SOURCE_OF_TRUTH}$$
+
+---
+
+
+## 7. Limits as executable governance
+
 
 Limits must be evaluated at several phases, not once.
 
@@ -741,7 +420,9 @@ This makes authority an execution invariant rather than a prompt instruction.
 
 ---
 
-## 17. Planning: freedom inside a hard boundary
+
+## 8. Planning: freedom inside a hard boundary
+
 
 GluLess planning should not be defined as “the LLM writes steps.”
 
@@ -780,7 +461,54 @@ This separation is a core architectural defense against model drift.
 
 ---
 
-## 18. Goal evaluation: success must be observable
+
+## 9. A proposed runtime boundary
+
+
+A minimal implementation can preserve clean ownership through a small set of interfaces.
+
+```text
+Parser
+  source -> IR
+
+Validator
+  IR -> valid | diagnostics
+
+UtilityImporter
+  external interface description -> Utility definitions
+
+UtilityResolver
+  Utility reference -> executable binding
+
+LimitEvaluator
+  contract + proposed invocation + state -> decision
+
+Planner
+  Goal + Limits + Utilities + observations -> candidate action/plan
+
+Executor
+  authorized invocation -> execution outcome
+
+Observer
+  system state -> typed observation
+
+GoalEvaluator
+  Goal + observation + evidence -> satisfied | unsatisfied | indeterminate
+
+EventSink
+  canonical runtime event -> transport/storage adapter
+
+EvidenceStore
+  evidence object -> durable reference
+```
+
+The interfaces matter more than class names. Their purpose is to keep deterministic semantic ownership separate from model-driven planning.
+
+---
+
+
+## 10. Goal evaluation: success must be observable
+
 
 A contract is not complete because all planned steps ran.
 
@@ -816,7 +544,9 @@ AI evaluation should be explicit evidence, not hidden runtime intuition.
 
 ---
 
-## 19. Events, results, artifacts, and evidence
+
+## 11. Events, results, artifacts, and evidence
+
 
 GluLess should define separate types for four concepts that agent frameworks often blur together.
 
@@ -883,7 +613,27 @@ What proves the result?
 
 ---
 
-## 20. Security model: authority must survive agent autonomy
+
+## 12. Empirical Feedback Loops & Experience Indexing
+
+
+Runtimes optimize future capability resolution by gathering invocation facts, without modifying foundation model weights or violating permission boundaries.
+
+$$\text{PAST_SUCCESS} \neq \text{CURRENT_AUTHORITY}$$
+
+An operation's historical success rate may influence its priority ranking, but it can never expand its current authorization. Every mutation must pass through the deterministic gate of the contract's Limits prior to execution.
+
+Furthermore, we preserve evidence integrity by keeping declarative specs separate from empirical observations:
+
+$$\text{DECLARED_SEMANTICS} \neq \text{OBSERVED_BEHAVIOR}$$
+
+Runtimes record anomalies (e.g., latency spikes, unannounced side effects) under distinct observed layers rather than silently mutating canonical declarations.
+
+---
+
+
+## 13. Security model: authority must survive agent autonomy
+
 
 Agent autonomy raises the cost of ambiguous authority because the runtime can discover paths the contract author never explicitly imagined.
 
@@ -923,7 +673,9 @@ Evidence must be intentionally constructed, redacted where required, and policy-
 
 ---
 
-## 21. Sovereignty, Statelessness, and Agnosticism Invariants
+
+## 14. Sovereignty, Statelessness, and Agnosticism Invariants
+
 
 The architecture of GluLess is governed by a core Sovereignty Model and a strict separation of execution and storage concerns. These principles ensure that GluLess remains a portable layer above existing systems rather than a new platform dependency.
 
@@ -982,7 +734,9 @@ To preserve these boundaries under autonomous agent execution, the runtime enfor
 
 ---
 
-## 22. Agent-Native Composition and Execution
+
+## 15. Agent-Native Composition and Execution
+
 
 To scale under autonomous agent operation, GluLess optimizes for contract assembly, modification, and evaluation directly by intelligent systems rather than manual human authoring.
 
@@ -1028,7 +782,381 @@ Grammar rules that exist purely for textual convenience are excluded from the ca
 
 ---
 
-## 23. Why not just use prompts, tool calling, or an agent framework?
+
+## 16. What already exists — and why GluLess should reuse it
+
+
+A defensible GluLess architecture begins by refusing to recreate solved layers.
+
+The most relevant standards and systems fall into several categories:
+
+1. **Capability/interface description** — OpenAPI, JSON Schema, GraphQL, gRPC, MCP.
+2. **Agent interoperability** — A2A.
+3. **Agent/frontend interaction** — AG-UI.
+4. **Policy and authorization** — Cedar, OPA/Rego.
+5. **Durable orchestration** — Temporal, AWS Step Functions, LangGraph.
+6. **Desired-state configuration** — Terraform and controller/reconciliation patterns.
+7. **Planning languages** — PDDL and related automated planning formalisms.
+8. **Events and provenance** — CloudEvents, W3C PROV and tracing systems.
+
+None of these categories should be treated as competitors by default. They are potential implementation owners beneath or beside GluLess.
+
+---
+
+
+## 17. OpenAPI: a strong Utility source, not an execution contract
+
+
+The OpenAPI Specification defines a language-agnostic description of HTTP API surfaces. Its primary value to GluLess is obvious: it already provides machine-readable operations, parameters, request bodies, response schemas, security schemes, servers, and error surfaces. An agent runtime should not require a bespoke wrapper around every REST API when a valid OpenAPI document already exists.[1]
+
+Conceptually:
+
+```text
+OpenAPI Operation
+      ↓ import
+Typed GluLess Utility
+```
+
+A GluLess importer can derive:
+
+```text
+utility.id        <- operationId or canonical operation identity
+utility.input     <- parameters + request body schema
+utility.output    <- response schema(s)
+utility.transport <- HTTP method + path + server metadata
+utility.auth      <- referenced security requirements
+utility.errors    <- non-success responses
+```
+
+The missing semantics are equally important. OpenAPI does not define the caller’s Goal, the runtime’s policy for selecting one operation over another, cross-operation authority, approval requirements, execution budgets, global invariants, or what evidence is sufficient to establish contract-level success.
+
+Therefore:
+
+> **OpenAPI should become a Utility source inside GluLess, not a dialect GluLess replaces.**
+
+This is an example of the project’s decision order: reuse the interface standard, add only the execution-contract semantics that are absent.
+
+---
+
+
+## 18. MCP: capability exchange is becoming standardized
+
+
+The Model Context Protocol defines a client-host-server architecture for connecting model applications with resources, prompts, and tools. Its specification also includes capability negotiation, lifecycle behavior, logging, progress, cancellation, authorization support for HTTP transports, and increasingly explicit task semantics.[2][3]
+
+For GluLess, MCP is important because it makes a large category of agent capability discoverable through a standard protocol.
+
+Conceptually:
+
+```text
+MCP tool → Utility
+MCP resource → readable Utility/resource binding
+MCP task → long-running Utility execution surface
+```
+
+MCP also demonstrates an architectural principle GluLess should preserve: **capability availability and capability authorization are separate concerns**. MCP advertises what a server can do, but the protocol’s own security guidance makes clear that implementers still need access controls, consent/authorization flows, validation, and auditing.[3]
+
+That separation aligns closely with GLU:
+
+```text
+Utilities = what can be invoked
+Limits    = whether a particular invocation is allowed
+```
+
+However, MCP is not itself a contract language for declaring an end-state across multiple capabilities. Its primary unit is protocol interaction with a server capability. A GluLess runtime can therefore consume MCP without attempting to absorb or fork it.
+
+---
+
+
+## 19. A2A: inter-agent protocol, not agent program semantics
+
+
+The Agent2Agent protocol addresses interoperability among independent agent systems. Its current specification centers on capability discovery, tasks, messages, artifacts, streaming, and secure exchange without requiring one agent to expose its internal memory or implementation.[4]
+
+This is exactly the sort of protocol GluLess should compose with.
+
+A2A can answer:
+
+```text
+How do I discover another agent?
+How do I send it work?
+How is task state represented?
+How are messages and artifacts exchanged?
+```
+
+GluLess must answer different questions:
+
+```text
+Why is this task being executed?
+What outcome is required?
+What Limits govern delegation?
+Is delegation to this agent authorized?
+What evidence from the delegated task satisfies the parent Goal?
+```
+
+A2A therefore maps naturally to the Utility layer:
+
+```text
+A2A Agent Card / capability
+        ↓
+      Utility
+        ↓
+A2A task execution
+```
+
+Delegation should not erase the parent contract’s Limits. A remote agent can choose its internal plan, but the GluLess runtime must preserve authority, budget, and evidence requirements across the boundary.
+
+---
+
+
+## 20. AG-UI: observability and interaction at the frontend boundary
+
+
+AG-UI is an event-based protocol for connecting agents to user-facing applications. It standardizes lifecycle events, streamed messages, tool-call events, state snapshots and deltas, and other structures used to synchronize an agent runtime with a frontend.[5]
+
+Even though GluLess is agent-native rather than human-interface-native, AG-UI remains valuable because a runtime needs an external observation surface. The important reuse pattern is:
+
+```text
+GluLess execution state/event
+        ↓ adapter
+      AG-UI
+        ↓
+observer / frontend
+```
+
+GluLess should not invent a new browser transport or UI synchronization protocol merely to show execution progress. It should emit a canonical internal event model and adapt that model to existing standards such as AG-UI, SSE, WebSocket, or CloudEvents depending on the boundary.
+
+This keeps GluLess focused on contract semantics rather than presentation.
+
+---
+
+
+## 21. Cedar and OPA/Rego: policy is a component of Limits
+
+
+Cedar and Open Policy Agent solve important pieces of the Limits problem.
+
+Cedar is designed for authorization decisions based on principals, actions, resources, context, and policy. Its evaluation model is deterministic, with explicit permit/forbid behavior and default denial when no policy grants a request.[6]
+
+OPA uses the declarative Rego language to evaluate policy over structured data. It is widely applicable to admission control, authorization, configuration, and other policy decisions.[7]
+
+GluLess should not invent a full policy engine if Cedar or OPA can own the required rule semantics.
+
+A useful architecture is:
+
+```text
+GluLess Limit
+    ↓ compile/map
+Policy decision request
+    ↓
+Cedar / OPA / native deterministic evaluator
+    ↓
+allow | deny | require approval | constraints
+```
+
+But Limits are broader than authorization alone. A contract may need to express:
+
+- spend ceilings,
+- execution deadlines,
+- maximum attempts,
+- mandatory evidence,
+- model restrictions,
+- data residency constraints,
+- irreversible-action approvals,
+- invariants that must remain true throughout execution.
+
+Some of those can be delegated to existing policy engines; others belong to runtime accounting or contract validation.
+
+The correct GluLess design is therefore **compositional**: reuse mature policy evaluators where their semantics fit, and keep the GluLess Limit model general enough to bind several enforcement mechanisms under one contract.
+
+---
+
+
+## 22. Temporal, Step Functions, and LangGraph: execution engines are not the contract
+
+
+Temporal provides durable workflow execution that can resume through crashes and infrastructure failures.[8] AWS Step Functions defines workflows as state machines using Amazon States Language.[9] LangGraph provides a graph-based orchestration runtime with durable execution, state persistence, streaming, and human-in-the-loop mechanisms.[10]
+
+These systems solve execution reliability and orchestration extremely well. GluLess should not recreate a durable workflow engine merely to demonstrate agent execution.
+
+The distinction is control flow.
+
+In a conventional workflow system, the workflow author generally defines the graph or sequence:
+
+```text
+A → B → choice → C or D → E
+```
+
+In GluLess, the authored contract can leave the execution path open:
+
+```text
+Goal    = state E is true
+Limits  = actions X/Y forbidden, spend <= N, approval before Z
+Utilities = {A, B, C, D, Z, ...}
+```
+
+The planner may construct different valid paths at runtime.
+
+That means GluLess can use Temporal or another durable runtime beneath its executor while retaining a different programming model above it:
+
+```text
+GluLess Contract
+      ↓
+Planner chooses permitted plan
+      ↓
+Execution adapter
+      ↓
+Temporal / Step Functions / other runtime
+```
+
+LangGraph is closer to agentic execution because nodes may contain model reasoning and dynamic routing, but the graph remains an orchestration structure created by the application. GluLess aims to make **Goal + Limits + Utilities** the authored semantic core and allow graph structure to be a runtime product when appropriate.
+
+---
+
+
+## 23. Terraform and reconciliation: Goal has a useful precedent
+
+
+Terraform’s language is declarative: it describes intended infrastructure rather than the imperative sequence used to create it.[11] Kubernetes-style controllers similarly operate through reconciliation between current and desired state.
+
+This is one of the strongest precedents for the Goal concept.
+
+The analogy is valuable but incomplete.
+
+Desired-state infrastructure systems usually operate inside a bounded domain with providers, resources, dependency graphs, and relatively deterministic reconciliation semantics. Agentic Goals may span heterogeneous APIs, external agents, uncertain observations, semantic interpretation, and multiple acceptable solution paths.
+
+GluLess can borrow several principles:
+
+- compare observed state to desired state;
+- make convergence explicit;
+- preserve idempotency where possible;
+- separate plan from desired state;
+- record state transitions;
+- detect drift;
+- avoid treating a single successful API call as proof of Goal satisfaction.
+
+But GluLess must add first-class authority and capability semantics because an intelligent planner can discover and select actions across a much broader surface.
+
+---
+
+
+## 24. PDDL: planning theory is relevant, but GluLess should not become a planner language
+
+
+The Planning Domain Definition Language (PDDL) represents planning domains using predicates, actions, preconditions, effects, and problem goals. It is a major historical precedent for separating a desired goal from the planner that searches for an action sequence.[12]
+
+The conceptual overlap with GluLess is real:
+
+```text
+PDDL domain actions      ~ Utilities
+PDDL preconditions       ~ Utility applicability / state constraints
+PDDL effects             ~ declared Utility effects
+PDDL problem goal        ~ Goal
+planner                  ~ GluLess planning component
+```
+
+However, PDDL assumes a formal planning domain whose actions and effects are modeled sufficiently for symbolic planning. Real API ecosystems rarely offer that completeness. Side effects can be partial, externally observable, delayed, probabilistic, undocumented, or dependent on opaque services.
+
+GluLess should therefore learn from automated planning without requiring every Utility to become a fully formal action model.
+
+A pragmatic Utility can expose increasing levels of semantic richness:
+
+```text
+Level 0: typed input/output
+Level 1: side-effect classification
+Level 2: preconditions / postconditions
+Level 3: cost / latency / risk metadata
+Level 4: formal effects suitable for deterministic planning
+```
+
+The runtime can exploit richer metadata when available and fall back to AI-assisted planning plus observation when it is not.
+
+This graded model is more compatible with existing APIs than requiring the ecosystem to rewrite itself in a planning formalism.
+
+---
+
+
+## 25. CloudEvents and provenance: evidence must be structured
+
+
+CloudEvents standardizes a common envelope for event data, improving interoperability across event producers and infrastructure.[13] W3C provenance models provide another useful conceptual vocabulary for relating entities, activities, and agents.
+
+GluLess should distinguish **events** from **evidence**.
+
+An event says something happened:
+
+```text
+UtilityInvocationStarted
+UtilityInvocationSucceeded
+ApprovalRequested
+ApprovalGranted
+GoalEvaluationCompleted
+```
+
+Evidence is a durable object used to substantiate a claim:
+
+```text
+HTTP response + digest
+signed artifact
+validated state observation
+repository commit id
+deployment revision
+policy decision record
+test result
+external receipt
+```
+
+A run may emit many events but still lack sufficient evidence to prove the Goal.
+
+This distinction prevents a common agent-system failure mode: equating internal narration or tool-call logs with successful external state change.
+
+---
+
+
+## 26. The gap: a typed contract across layers
+
+
+The research landscape suggests that no single adjacent standard owns all of the following as one executable unit:
+
+```text
+1. an outcome that must become true
+2. authority and constraints governing all execution paths
+3. discoverable typed capabilities
+4. planner freedom to choose among permitted paths
+5. deterministic enforcement before mutations
+6. observable execution events
+7. evidence bound to effects and results
+8. deterministic evaluation of contract completion where possible
+```
+
+This is the GluLess gap.
+
+The product thesis is **not** that every individual element is new. Most are not. The thesis is that agentic systems need a canonical execution contract that composes these concerns without reducing them to prompt text or hard-coded orchestration graphs.
+
+### 13.1 Comparison matrix
+
+| System / standard | Goal semantics | Limits / policy | Capability description | Dynamic agent planning | Durable execution | Events | Evidence as completion proof |
+|---|---|---|---|---|---|---|---|
+| OpenAPI | No | API security metadata only | Strong for HTTP | No | No | No | No |
+| MCP | Task/tool scoped | Transport/auth + host policy guidance | Strong for MCP capabilities | Model may select tools | Emerging task support | Progress/logging | Not contract-level |
+| A2A | Task objective/message | Protocol security | Agent capabilities | Remote agent internal | Task lifecycle | Streaming/task state | Artifacts, but not parent contract proof |
+| AG-UI | No | No | Tool/event surface | Observes agent | No | Strong UI event model | No |
+| Cedar | No | Strong authorization | No | No | No | Decision diagnostics | Policy decision only |
+| OPA/Rego | Desired policy decisions | Strong policy | No | No | No | Via integrations | Policy decision only |
+| Temporal | Workflow completion | App-defined | Activities | App-defined | Strong | Strong history | Workflow result/history |
+| Step Functions | State-machine terminal state | IAM + app rules | Service integrations | Limited to authored graph | Strong | Strong | Workflow state/history |
+| LangGraph | Application-defined | Application-defined | Tools/nodes | Strong within graph | Strong | Streaming/tracing | App-defined |
+| Terraform | Strong desired state | Provider/IAM outside language | Providers/resources | Deterministic planning | Apply/reconcile | Plan/apply logs | State + provider observation |
+| PDDL | Strong formal goal | Constraints possible, not authority-centric | Formal actions | Strong planner model | Planner-dependent | Not primary | State satisfaction |
+| **GluLess target** | **First-class** | **First-class** | **Imports existing standards** | **First-class** | **Delegated/reused** | **Canonical + adapters** | **First-class** |
+
+The most important column is the last one. GluLess treats evidence not as optional telemetry, but as part of the execution contract.
+
+---
+
+
+## 27. Why not just use prompts, tool calling, or an agent framework?
+
 
 Because each leaves critical semantics implicit in application code or model context.
 
@@ -1048,7 +1176,9 @@ GluLess is useful only if it moves these semantics out of ad hoc application glu
 
 ---
 
-## 24. Why not make GluLess a general-purpose programming language?
+
+## 28. Why not make GluLess a general-purpose programming language?
+
 
 Because that would destroy the leverage of the idea.
 
@@ -1067,7 +1197,9 @@ If not, the feature probably belongs in an existing implementation language or s
 
 ---
 
-## 25. MVP: the smallest falsifiable vertical slice
+
+## 29. MVP: the smallest falsifiable vertical slice
+
 
 The initial MVP should prove one complete contract over one real API.
 
@@ -1143,7 +1275,9 @@ The exact domain matters less than the completeness of the contract lifecycle.
 
 ---
 
-## 26. The decision order should be part of runtime engineering culture
+
+## 30. The decision order should be part of runtime engineering culture
+
 
 GluLess development itself should follow the same anti-glue discipline the language promotes.
 
@@ -1172,7 +1306,9 @@ If GluLess needs to invent its own API description format, task protocol, event 
 
 ---
 
-## 27. Falsifiability: how GluLess could be wrong
+
+## 31. Falsifiability: how GluLess could be wrong
+
 
 A serious architecture needs conditions under which its central claim should be rejected or narrowed.
 
@@ -1208,7 +1344,9 @@ These are valuable failure modes because they force the MVP to prove semantics r
 
 ---
 
-## 28. Research questions for the language design
+
+## 32. Research questions for the language design
+
 
 The following questions should remain open until implementation pressure produces evidence.
 
@@ -1250,50 +1388,9 @@ These questions should be driven by failing tests and real execution traces, not
 
 ---
 
-## 29. A proposed runtime boundary
 
-A minimal implementation can preserve clean ownership through a small set of interfaces.
+## 33. Testing model
 
-```text
-Parser
-  source -> IR
-
-Validator
-  IR -> valid | diagnostics
-
-UtilityImporter
-  external interface description -> Utility definitions
-
-UtilityResolver
-  Utility reference -> executable binding
-
-LimitEvaluator
-  contract + proposed invocation + state -> decision
-
-Planner
-  Goal + Limits + Utilities + observations -> candidate action/plan
-
-Executor
-  authorized invocation -> execution outcome
-
-Observer
-  system state -> typed observation
-
-GoalEvaluator
-  Goal + observation + evidence -> satisfied | unsatisfied | indeterminate
-
-EventSink
-  canonical runtime event -> transport/storage adapter
-
-EvidenceStore
-  evidence object -> durable reference
-```
-
-The interfaces matter more than class names. Their purpose is to keep deterministic semantic ownership separate from model-driven planning.
-
----
-
-## 30. Testing model
 
 Semantic changes should use test-driven development.
 
@@ -1350,7 +1447,9 @@ This makes the project’s own development process consistent with its runtime p
 
 ---
 
-## 31. Positioning: what GluLess is and is not
+
+## 34. Positioning: what GluLess is and is not
+
 
 ### GluLess is
 
@@ -1380,7 +1479,9 @@ This boundary is the project’s strongest defense against scope expansion.
 
 ---
 
-## 32. The deeper thesis: APIs are becoming the instruction set for agents
+
+## 35. The deeper thesis: APIs are becoming the instruction set for agents
+
 
 Modern software already exposes enormous portions of the world through typed or semi-typed APIs. OpenAPI describes HTTP operations. MCP exposes model-facing tools and resources. A2A exposes other agents. Cloud platforms expose infrastructure. Git providers expose repositories, reviews, issues, builds, and deployments. SaaS systems expose business state.
 
@@ -1404,7 +1505,9 @@ The language therefore need not be large. Its leverage comes from connecting exi
 
 ---
 
-## 33. Conclusion
+
+## 36. Conclusion
+
 
 The emerging agent stack is already rich in protocols and runtimes. OpenAPI describes APIs. MCP exposes tools and context. A2A lets independent agents interoperate. AG-UI connects agent runtimes to interactive frontends. Cedar and OPA provide deterministic policy evaluation. Temporal and related systems provide durable execution. CloudEvents standardizes event envelopes. Terraform and PDDL demonstrate useful ideas around desired state and planning.
 
@@ -1441,38 +1544,9 @@ It becomes an executable contract model for autonomous software.
 
 ---
 
-## 34. Persistent Utility Registries & Ephemeral Context Projections
-
-To execute scaling agentic workloads efficiently, runtimes must not flood prompt context windows with large lists of raw tool specifications or thousands of API endpoints. Doing so degrades reasoning quality and inflates cost.
-
-$$\text{KNOWLEDGE} \neq \text{CONTEXT}$$
-
-To formalize this distinction, GluLess implements a decoupled knowledge architecture:
-1.  **Durable Utility Registry**: A persistent catalog that normalizes capabilities imported from OpenAPI, MCP, GraphQL, or A2A. Instead of planning against raw documents, agents query this structured plane.
-2.  **Durable Experience Index**: Tracks invocation latencies, error frequencies, and goal achievements across execution cycles.
-3.  **Ephemeral Context Resolver**: Evaluates contract goals and active limits against the registry. It filters out denied utilities, ranks allowed utilities based on telemetry, and projects a minimal working set for the planner.
-
-$$\text{CONTEXT} \neq \text{SOURCE_OF_TRUTH}$$
-
----
-
-## 35. Empirical Feedback Loops & Experience Indexing
-
-Runtimes optimize future capability resolution by gathering invocation facts, without modifying foundation model weights or violating permission boundaries.
-
-$$\text{PAST_SUCCESS} \neq \text{CURRENT_AUTHORITY}$$
-
-An operation's historical success rate may influence its priority ranking, but it can never expand its current authorization. Every mutation must pass through the deterministic gate of the contract's Limits prior to execution.
-
-Furthermore, we preserve evidence integrity by keeping declarative specs separate from empirical observations:
-
-$$\text{DECLARED_SEMANTICS} \neq \text{OBSERVED_BEHAVIOR}$$
-
-Runtimes record anomalies (e.g., latency spikes, unannounced side effects) under distinct observed layers rather than silently mutating canonical declarations.
-
----
 
 # References and primary sources
+
 
 [1] OpenAPI Initiative. *OpenAPI Specification v3.1.1.* https://spec.openapis.org/oas/v3.1.1.html
 
@@ -1510,7 +1584,9 @@ Additional relevant standards:
 
 ---
 
+
 ## Editorial notes for curation
+
 
 This draft deliberately makes several choices that should remain subject to implementation evidence:
 

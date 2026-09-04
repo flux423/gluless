@@ -371,9 +371,64 @@ To allow runtimes and planners to discover capabilities dynamically without over
 *   **ContextResolver**: Ephemerally constructs a bounded `ContextProjection` containing only the relevant, ranked utilities, goals, and limits for the planner.
 
 ### 25.2 Core Invariants
-1.  `KNOWLEDGE != CONTEXT`: Durable registry metadata persists across runs; agent prompt context remains ephemeral and minimal.
-2.  `CONTEXT != SOURCE_OF_TRUTH`: Projected context is discardable and run-scoped.
-3.  `DECLARED_SEMANTICS != OBSERVED_BEHAVIOR`: Declare schemas and contracts statically; record observed execution anomalies dynamically.
-4.  `PAST_SUCCESS != CURRENT_AUTHORITY`: Experience metrics optimize capability choice; they never expand permissions.
-5.  `UTILITY != BINDING`: A utility represents a logical capability; a binding maps to its target HTTP, gRPC, or MCP endpoint.
-6.  `STATELESS_RUNTIME != NO_PERSISTENCE`: The runtime remains stateless and reconstructable; discovery catalogs and experience indexes may be persistent.
+Runtimes and specifications must adhere strictly to these first-class GluLess invariants:
+*   `KNOWLEDGE != CONTEXT` (Durable registry knowledge remains separate from ephemeral prompt context)
+*   `CONTEXT != SOURCE_OF_TRUTH` (Projected context is discardable and run-scoped)
+*   `CONTEXT != PERSISTENCE` (Reasoning context is transient and reconstructable)
+*   `DECLARED_SEMANTICS != OBSERVED_BEHAVIOR` (Canonical specs are distinct from empirically observed traits)
+*   `INFERENCE != FACT` (Empirical assumptions require promotion rules before canonical integration)
+*   `PAST_SUCCESS != CURRENT_AUTHORITY` (Prior execution success never grants permissions or overrides limits)
+*   `EXPERIENCE != POLICY` (Telemetry informs planning priority; policy rules enforce boundaries)
+*   `UTILITY != BINDING` (Logical capability interface is decoupled from concrete endpoint binding)
+*   `CAPABILITY_IDENTITY != PROVIDER_IDENTITY` (Contracts depend on logical capability concepts, not provider names)
+*   `REGISTRY != EXECUTION_STATE` (Registry catalogs interfaces; runtime ledger tracks transient run states)
+*   `STATELESS_RUNTIME != NO_PERSISTENCE` (Runtimes are stateless; registries and evidence ledgers are durable)
+
+### 25.3 Execution Model Loop Diagram
+
+The core GluLess execution loop follows this structured data and authority graph:
+
+```text
+                 GLULESS CONTRACT
+            Goal · Limits · Utilities
+                         │
+                         ▼
+                  Context Resolver
+                         │
+            ┌────────────┼────────────┐
+            │            │            │
+      UtilityRegistry Observations ExperienceIndex
+            │            │            │
+            └────────────┼────────────┘
+                         ▼
+                 ContextProjection
+                         │
+                         ▼
+                       Agent
+                         │
+                  candidate action
+                         │
+                         ▼
+                   LimitEvaluator
+                         │
+                         ▼
+                       Binding
+                         │
+                         ▼
+                      Executor
+                         │
+                         ▼
+                  External System
+                         │
+                         ▼
+                      Observer
+                         │
+                         ▼
+                      Evidence
+                    ┌────┴─────┐
+                    │          │
+             GoalEvaluator  ExperienceIndex
+                    │
+                    ▼
+                  Result
+```
