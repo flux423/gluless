@@ -1,0 +1,18 @@
+# GluLess — GitLab CI
+#
+# Publishes demo/ to GitLab Pages via the shared blueflyio/gitlab_components
+# pages component. No bespoke deploy logic in this repository.
+#
+# The demo is pure static files (index.html, style.css, app.js,
+# data/proven-canary.json) — no build step required.
+#
+# Deployment trigger: on_success from main (auto_deploy: "true").
+# Manual deploy available from any branch for testing.
+
+include:
+  - component: $CI_SERVER_FQDN/blueflyio/gitlab_components/pages@release/v0.1.x
+    inputs:
+      output_dir: demo
+      deploy_branch: main
+      auto_deploy: "true"
+      artifact_expiry: "4 weeks"

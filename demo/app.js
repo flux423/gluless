@@ -1,13 +1,25 @@
 /**
  * GluLess — app.js
  *
- * AG-UI SSE client. Pure projection of runtime state.
- * No fabricated data. Every rendered value comes from the agent.
+ * Two modes:
+ *
+ *   REPLAY  Default hosted experience. Loads demo/data/proven-canary.json
+ *           and plays it through handleEvent() with realistic inter-event
+ *           timing. No agent required. Shows REPLAY badge.
+ *
+ *   LIVE    Connects to a GluLess agent running locally at localhost:8080.
+ *           Shows LIVE badge. Falls back to replay if agent is unreachable.
+ *
+ * The replay fixture is a real captured PROVEN execution — not fabricated.
  */
 
 'use strict';
 
-const AGENT_URL = 'http://localhost:8080/agent';
+const AGENT_URL   = 'http://localhost:8080/agent';
+const CANARY_URL  = 'data/proven-canary.json';
+
+// Max inter-event delay during replay (keeps full playback under ~3s)
+const REPLAY_MAX_DELAY_MS = 180;
 
 const DEMO_CONTRACT = `id: glu-demo-contract
 goals:
@@ -37,13 +49,15 @@ const STAGE_PHASES = {
 };
 
 const TERMINAL_PHASES = new Set(['proven', 'unresolved']);
-const PHASE_ORDER     = ['resolving', 'filtering', 'authorizing', 'executing', 'verifying'];
 
 // ── State ─────────────────────────────────────────────────────
+let mode         = 'replay';  // 'replay' | 'live'
 let isRunning    = false;
 let abortCtrl    = null;
 let eventCount   = 0;
 let currentPhase = null;
+let agentOnline  = false;
+let canaryData   = null;
 
 // ── DOM refs ──────────────────────────────────────────────────
 const $run       = document.getElementById('btn-run');
@@ -51,6 +65,7 @@ const $runIcon   = document.getElementById('run-icon');
 const $runLabel  = document.getElementById('run-label');
 const $statusDot = document.getElementById('status-dot');
 const $statusLbl = document.getElementById('status-label');
+const $modeBadge = document.getElementById('mode-badge');
 
 const $goalDesc  = document.getElementById('goal-description');
 const $goalPred  = document.getElementById('goal-predicate');
@@ -81,16 +96,16 @@ const $ps = {
 const $decPaths    = document.getElementById('decision-paths');
 const $evEntries   = document.getElementById('evidence-entries');
 
-const $cardResult  = document.getElementById('card-result');
-const $resultBlock = document.getElementById('result-block');
+const $cardResult    = document.getElementById('card-result');
+const $resultBlock   = document.getElementById('result-block');
 const $resultStatus  = document.getElementById('result-status');
 const $resultPred    = document.getElementById('result-predicate');
 const $resultVerdict = document.getElementById('result-verdict');
 
-const $contractDrawer  = document.getElementById('contract-drawer');
-const $contractPre     = document.getElementById('contract-pre');
-const $btnContract     = document.getElementById('btn-contract');
-const $btnCloseContr   = document.getElementById('btn-close-contract');
+const $contractDrawer = document.getElementById('contract-drawer');
+const $contractPre    = document.getElementById('contract-pre');
+const $btnContract    = document.getElementById('btn-contract');
+const $btnCloseContr  = document.getElementById('btn-close-contract');
 
 const $eventsToggle = document.getElementById('events-toggle');
 const $eventsBody   = document.getElementById('events-body');
@@ -99,10 +114,8 @@ const $evCount      = document.getElementById('ev-count');
 const $toggleCaret  = document.getElementById('toggle-caret');
 
 // ── Bootstrap ─────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   $contractPre.textContent = DEMO_CONTRACT;
-
-  pingAgent();
 
   $run.addEventListener('click', onRunClick);
 
@@ -125,34 +138,136 @@ document.addEventListener('DOMContentLoaded', () => {
       onRunClick();
     }
   });
+
+  // Load canary fixture in parallel with agent probe
+  setStatus('connecting', 'Loading…');
+
+  const [canary] = await Promise.all([
+    loadCanary(),
+    probeAgent(),
+  ]);
+
+  canaryData = canary;
+
+  if (agentOnline) {
+    setMode('live');
+    setStatus('online', 'Agent ready');
+  } else {
+    setMode('replay');
+    setStatus('offline', 'Replay mode');
+    if (canaryData) {
+      // Auto-play on load when hosted without a local agent
+      await sleep(400);
+      await runReplay();
+    }
+  }
 });
 
-// ── Agent health ──────────────────────────────────────────────
-async function pingAgent() {
+// ── Mode ──────────────────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  if (m === 'live') {
+    $modeBadge.textContent  = 'LIVE';
+    $modeBadge.className    = 'mode-badge live';
+    $modeBadge.hidden       = false;
+    $runLabel.textContent   = 'Run live';
+  } else {
+    $modeBadge.textContent  = 'REPLAY';
+    $modeBadge.className    = 'mode-badge';
+    $modeBadge.hidden       = false;
+    $runLabel.textContent   = 'Replay';
+  }
+}
+
+// ── Agent probe ───────────────────────────────────────────────
+async function probeAgent() {
   try {
     const res  = await fetch(AGENT_URL.replace('/agent', '/health'),
-      { signal: AbortSignal.timeout(3000) });
+      { signal: AbortSignal.timeout(2000) });
     const data = res.ok ? await res.json() : null;
-    setStatus('online', data ? `Ready · ${data.registry ?? '?'} utilities` : 'Ready');
+    agentOnline = res.ok;
+    if (agentOnline && data) {
+      // Update run button label after probe
+      $runLabel.textContent = 'Run live';
+    }
   } catch {
-    setStatus('error', 'Agent offline');
+    agentOnline = false;
+  }
+}
+
+// ── Load canary fixture ───────────────────────────────────────
+async function loadCanary() {
+  try {
+    const res = await fetch(CANARY_URL);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
   }
 }
 
 function setStatus(state, label) {
-  $statusDot.className = `status-dot ${state}`;
+  $statusDot.className   = `status-dot ${state}`;
   $statusLbl.textContent = label;
 }
 
-// ── Run lifecycle ─────────────────────────────────────────────
+// ── Run dispatcher ────────────────────────────────────────────
 async function onRunClick() {
   if (isRunning) { abortCtrl?.abort(); return; }
 
+  if (mode === 'live' && agentOnline) {
+    await runLive();
+  } else if (canaryData) {
+    // If live was requested but agent is now gone, fall back silently
+    if (mode === 'live') {
+      setMode('replay');
+      setStatus('offline', 'Agent unreachable — replay');
+    }
+    await runReplay();
+  } else {
+    logErr('No canary fixture and no agent. Cannot run.');
+  }
+}
+
+// ── Replay execution ──────────────────────────────────────────
+async function runReplay() {
+  if (!canaryData?.events?.length) return;
+
   startRun();
+  setStatus('running', 'Replaying…');
+
+  const events = canaryData.events;
+  let prevOffset = 0;
+
+  for (const event of events) {
+    if (abortCtrl?.signal.aborted) break;
+
+    const offset  = event.offsetMs ?? 0;
+    const rawGap  = offset - prevOffset;
+    const delay   = Math.min(rawGap, REPLAY_MAX_DELAY_MS);
+    prevOffset    = offset;
+
+    if (delay > 10) await sleep(delay);
+
+    handleEvent(event);
+  }
+
+  endRun();
+  if (agentOnline) {
+    setStatus('online', 'Agent ready');
+  } else {
+    setStatus('offline', 'Replay complete');
+  }
+}
+
+// ── Live execution ────────────────────────────────────────────
+async function runLive() {
+  startRun();
+  setStatus('running', 'Running…');
 
   const threadId = crypto.randomUUID();
   const runId    = crypto.randomUUID();
-  abortCtrl = new AbortController();
+  abortCtrl      = new AbortController();
 
   try {
     const res = await fetch(AGENT_URL, {
@@ -190,13 +305,13 @@ async function onRunClick() {
     }
   } catch (err) {
     if (err.name !== 'AbortError') {
-      logErr(
-        `Cannot reach agent at ${AGENT_URL}\n` +
-        `Start: cd .agents/agents/glu-agent && .venv/bin/uvicorn agent:app --port 8080`
-      );
+      agentOnline = false;
+      setMode('replay');
+      logErr(`Agent unreachable: ${err.message}`);
     }
   } finally {
     endRun();
+    if (agentOnline) setStatus('online', 'Agent ready');
   }
 }
 
@@ -206,11 +321,8 @@ function startRun() {
   currentPhase = null;
 
   $run.classList.add('running');
-  $runIcon.textContent  = '◼';
-  $runLabel.textContent = 'Stop';
-  $run.disabled         = false;
-
-  setStatus('running', 'Running…');
+  $runIcon.textContent = '◼';
+  $run.disabled        = false;
 
   resetVerdict();
   resetPipeline();
@@ -227,8 +339,7 @@ function endRun() {
   isRunning = false;
   $run.classList.remove('running');
   $runIcon.textContent  = '▶';
-  $runLabel.textContent = 'Run';
-  pingAgent();
+  $runLabel.textContent = mode === 'live' ? 'Run live' : 'Replay';
 }
 
 // ── Event dispatcher ──────────────────────────────────────────
@@ -321,7 +432,7 @@ function applyState(s) {
     $goalPred.textContent = g.expression  || 'services.listed == true';
   }
 
-  if (s.limits?.length) renderLimits(s.limits);
+  if (s.limits?.length)    renderLimits(s.limits);
   if (s.utilities?.length) renderUtilities(s.utilities);
 
   if (s.context_projection) {
@@ -332,13 +443,13 @@ function applyState(s) {
   }
 
   if (s.decision_paths?.length) renderDecisionPaths(s.decision_paths);
-  if (s.evidence?.length) renderEvidence(s.evidence);
+  if (s.evidence?.length)       renderEvidence(s.evidence);
 
   if (s.context_projection?.registry_total  != null) $psc.resolve.textContent   = s.context_projection.registry_total;
   if (s.context_projection?.goal_compatible != null) $psc.filter.textContent    = s.context_projection.goal_compatible;
   if (s.context_projection?.limit_permitted != null) $psc.authorize.textContent = s.context_projection.limit_permitted;
-  if (s.observations != null)  $psc.execute.textContent = s.observations.length;
-  if (s.evidence     != null)  $psc.verify.textContent  = s.evidence.length;
+  if (s.observations != null) $psc.execute.textContent = s.observations.length;
+  if (s.evidence     != null) $psc.verify.textContent  = s.evidence.length;
 
   if (s.phase) applyPhase(s.phase);
 }
@@ -386,7 +497,7 @@ function showResult(verdict) {
   $cardResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-// ── Limits ────────────────────────────────────────────────────
+// ── Renderers ─────────────────────────────────────────────────
 function renderLimits(limits) {
   $limitsList.innerHTML = limits.map(l => {
     const pat    = l.pattern || '';
@@ -402,7 +513,6 @@ function renderLimits(limits) {
   }).join('');
 }
 
-// ── Utilities ─────────────────────────────────────────────────
 function renderUtilities(utilities) {
   $utilCards.innerHTML = utilities.map(u => {
     const isMut = (u.type || '').includes('mutation');
@@ -418,17 +528,16 @@ function renderUtilities(utilities) {
   }).join('');
 }
 
-// ── Decision paths ────────────────────────────────────────────
 function renderDecisionPaths(paths) {
   if (!paths?.length) return;
   $decPaths.innerHTML = paths.map(d => {
-    const isAuth  = d.decision === 'authorized';
+    const isAuth  = d.decision === 'authorized' || d.decision === 'allow';
     const glyph   = isAuth ? '✅' : '✕';
     const verdict = isAuth ? 'AUTHORIZED' : 'DENIED';
     const effect  = d.sideEffects === 'none' ? 'read · no side effects'
       : d.sideEffects ? d.sideEffects.replace(/-/g, ' ')
       : d.type || '';
-    return `<div class="dp-row ${d.decision}">
+    return `<div class="dp-row ${isAuth ? 'authorized' : 'denied'}">
       <span class="dp-glyph">${glyph}</span>
       <div class="dp-body">
         <div class="dp-id">${esc(d.utilityId)}</div>
@@ -440,7 +549,6 @@ function renderDecisionPaths(paths) {
   }).join('');
 }
 
-// ── Evidence ──────────────────────────────────────────────────
 function renderEvidence(items) {
   if (!items?.length) return;
   $evEntries.innerHTML = items.map(ev => {
@@ -471,7 +579,7 @@ function logEvt(type, body, extra = '') {
   const row = document.createElement('div');
   row.className = `log-row${extra ? ' ' + extra : ''}`;
   row.innerHTML =
-    `<span class="log-ts">${now()}</span>` +
+    `<span class="log-ts">${mode === 'replay' ? '[replay]' : now()}</span>` +
     `<span class="log-type">${esc(type)}</span>` +
     `<span class="log-body">${esc(body)}</span>`;
   $eventsLog.appendChild(row);
@@ -495,6 +603,8 @@ function resetPipeline() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 function esc(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
