@@ -1,13 +1,12 @@
 openapi: 3.0.3
 
 info:
-  title: GasCity API
+  title: Monitoring API
   description: >
-    GasCity platform API — manages cities and agent sessions.
+    Example Monitoring API — manages services and agent sessions.
 
-    GluLess binding metadata is declared per-operation via x-gluless-* extensions.
-    These annotations are consumed by the GluLess OpenAPI importer to project
-    Utility objects into the runtime registry.
+    This file demonstrates how GluLess projects an OpenAPI contract into
+    a runtime Utility registry via x-gluless-* extensions.
 
     Model:
 
@@ -22,7 +21,7 @@ info:
     This file does NOT act as an independent Utility Registry.
   version: 0.2.0
 
-x-provider-name: GasCity
+x-provider-name: Monitoring
 
 servers:
   - url: http://localhost:8000/v0
@@ -33,49 +32,49 @@ security:
 
 paths:
 
-  /cities:
+  /services:
     get:
-      operationId: listCities
-      summary: List all cities
-      description: Returns all cities registered in the GasCity network.
+      operationId: listServices
+      summary: List all services
+      description: Returns all services registered in the network.
       # GluLess binding metadata — consumed by OpenAPIImporter
-      x-gluless-name: GasCity.cities.list
+      x-gluless-name: Monitoring.services.list
       x-gluless-type: read
       x-gluless-side-effects: none
       tags:
-        - cities
+        - services
       responses:
         '200':
-          description: Array of City objects
+          description: Array of Service objects
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/City'
+                  $ref: '#/components/schemas/Service'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /cities/{name}:
+  /services/{name}:
     post:
-      operationId: createCity
-      summary: Create a city
+      operationId: createService
+      summary: Register a service
       description: >
-        Register a new city in the GasCity network.
+        Register a new service.
         This is a state-mutating operation; it is denied by default under
         the demo contract's "deny *" limit and requires explicit allow.
       # GluLess binding metadata — consumed by OpenAPIImporter
-      x-gluless-name: GasCity.city.create
+      x-gluless-name: Monitoring.service.create
       x-gluless-type: mutation
       x-gluless-side-effects: create
       tags:
-        - cities
+        - services
       parameters:
         - name: name
           in: path
-          description: City slug (unique identifier).
+          description: Service slug (unique identifier).
           required: true
           schema:
             type: string
@@ -84,18 +83,18 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CityCreate'
+              $ref: '#/components/schemas/ServiceCreate'
       responses:
         '201':
-          description: City created
+          description: Service registered
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/City'
+                $ref: '#/components/schemas/Service'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '409':
-          description: City name already exists
+          description: Service name already exists
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -107,7 +106,7 @@ paths:
         Request a session nudge or restart. Produces an external message.
         Denied by default under "deny *"; requires explicit allow limit.
       # GluLess binding metadata — consumed by OpenAPIImporter
-      x-gluless-name: GasCity.sessions.nudge
+      x-gluless-name: Monitoring.sessions.nudge
       x-gluless-type: mutation
       x-gluless-side-effects: external_message
       tags:
@@ -165,10 +164,9 @@ components:
     ApiKeyAuth:
       type: apiKey
       in: header
-      name: X-GasCity-Token
+      name: X-API-Token
       description: >
-        Service token issued by GasCity. Injected by GluLess runtime
-        from environment variable GASCITY_TOKEN.
+        API token. Injected by GluLess runtime from environment variable API_TOKEN.
 
   responses:
     UnauthorizedError:
@@ -186,32 +184,32 @@ components:
 
   schemas:
 
-    City:
+    Service:
       type: object
       required:
         - name
-        - health
+        - status
       properties:
         name:
           type: string
-          example: blucity
-        health:
+          example: auth-service
+        status:
           type: string
           enum: [healthy, degraded, down]
           example: healthy
         version:
           type: string
-          example: v0.1.4
-        agents:
+          example: v1.2.0
+        instances:
           type: integer
           example: 3
 
-    CityCreate:
+    ServiceCreate:
       type: object
       required:
-        - health
+        - status
       properties:
-        health:
+        status:
           type: string
           enum: [healthy, degraded, down]
           default: healthy

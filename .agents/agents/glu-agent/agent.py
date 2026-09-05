@@ -25,8 +25,8 @@ per-process (no fake reliability scores injected).
 
 Env vars
 --------
-  GASCITY_URL      Base URL of the GasCity API  (default: http://localhost:8000/v0)
-  GASCITY_TOKEN    Optional API key for X-GasCity-Token header
+  API_URL          Base URL of the target API  (default: http://localhost:8000/v0)
+  API_TOKEN        Optional API key for X-API-Token header
   OPENAPI_SPEC     Path to openapi.yaml (default: auto-discovered from repo root)
 """
 
@@ -67,8 +67,8 @@ from gluless.experience import ExperienceIndex
 _REPO_ROOT = Path(__file__).resolve().parents[3]  # …/POCs/Gluless
 _OPENAPI_DEFAULT = _REPO_ROOT / "api" / "openapi.yaml"
 _OPENAPI_PATH = Path(os.environ.get("OPENAPI_SPEC", str(_OPENAPI_DEFAULT)))
-_GASCITY_URL = os.environ.get("GASCITY_URL", "http://localhost:8000/v0").rstrip("/")
-_GASCITY_TOKEN = os.environ.get("GASCITY_TOKEN", "")
+_API_URL   = os.environ.get("API_URL",   "http://localhost:8000/v0").rstrip("/")
+_API_TOKEN = os.environ.get("API_TOKEN", "")
 _AGENT_VERSION = "0.2.0"
 
 # ── Registry bootstrap ────────────────────────────────────────────
@@ -108,7 +108,7 @@ def _build_registry() -> tuple[UtilityRegistry, list[Utility]]:
     #
     # operationId "healthCheck" → derived name ends in "health.list" or similar.
     # We exclude conservatively: keep only utilities that have an x-gluless-name,
-    # i.e. whose id starts with the x-provider-name ("GasCity.") AND whose
+    # i.e. whose id starts with the x-provider-name AND whose
     # operationId is NOT in the excluded set.
 
     # Build a map: lowercased x-gluless-name value → True (present in spec)
@@ -148,23 +148,21 @@ def _capability_domain(u: Utility) -> str:
     """
     Map a Utility to a semantic capability domain.
 
-    Uses the resource segment of the utility ID (after the namespace prefix)
-    so that 'GasCity' in the namespace does not substring-match 'city' and
-    produce false positives for unrelated resources like sessions.nudge.
+    Derives the domain from the resource segment of the utility ID
+    (everything between the namespace and the final verb segment).
 
     e.g.:
-      GasCity.cities.list   → resource_key = "cities.list"  → city.collection
-      GasCity.city.create   → resource_key = "city.create"  → city.collection
-      GasCity.sessions.nudge → resource_key = "sessions.nudge" → session.lifecycle
+      Monitoring.services.list   → "services"
+      Monitoring.service.create  → "service"
+      Monitoring.sessions.nudge  → "sessions"
+      Work.tasks.claim           → "tasks"
     """
     parts = u.id.split(".")
-    # Everything after the first segment (the namespace)
-    resource_key = ".".join(parts[1:]).lower() if len(parts) > 1 else u.id.lower()
-
-    if resource_key.startswith("cities") or resource_key.startswith("city"):
-        return "city.collection"
-    if resource_key.startswith("session"):
-        return "session.lifecycle"
+    # parts[0] = namespace, parts[-1] = verb, parts[1:-1] = resource path
+    if len(parts) >= 3:
+        return ".".join(parts[1:-1]).lower()
+    if len(parts) == 2:
+        return parts[1].lower()
     return u.namespace.lower()
 
 
@@ -332,8 +330,8 @@ def _evaluate_goal(goal: Goal, world_state: dict) -> bool:
     Evaluate a goal expression against world state.
 
     Supports:
-      cities.listed == true       →  world_state["cities"]["listed"] == "true"
-      cities.listed == true       →  world_state.get("cities.listed") == True
+      services.listed == true  →  world_state["services"]["listed"] == True
+      tasks.claimed == true    →  world_state["tasks"]["claimed"] == True
     """
     expr = goal.expression.strip()
 
@@ -372,37 +370,47 @@ def _evaluate_evidence(
     Evaluate a single evidence requirement.
 
     Returns a dict with: requirementId, assertion, passed, httpStatus,
-    detail suitable for UI rendering and the SDK EvidenceBuilder.
+    detail — suitable for UI rendering and the SDK EvidenceBuilder.
+
+    Supported assertions (matched as substrings, case-insensitive):
+      response.status == 200
+      response.schema valid        — any non-empty array of objects
+      items observed / count > 0   — body is non-empty list
+      <key>.listed == true         — world_state key resolution
     """
     assertion = req.assertion.strip()
+    assertion_lower = assertion.lower()
     passed = False
     detail = ""
 
-    if "response.status == 200" in assertion or "response.status==200" in assertion:
+    if "response.status == 200" in assertion_lower:
         passed = http_status == 200
         detail = f"HTTP {http_status}"
 
-    elif "response.schema valid" in assertion or "schema_valid" in assertion:
-        # Validate City array shape
-        if isinstance(body, list) and all(
-            isinstance(c, dict) and "name" in c and "health" in c for c in body
-        ):
+    elif "response.schema valid" in assertion_lower or "schema_valid" in assertion_lower:
+        # Accept any array of dicts as valid schema
+        if isinstance(body, list) and len(body) > 0 and all(isinstance(item, dict) for item in body):
             passed = True
-            detail = f"array of {len(body)} City objects"
+            detail = f"array of {len(body)} objects"
+        elif isinstance(body, list) and len(body) == 0:
+            passed = False
+            detail = "empty array"
         else:
-            detail = "response is not a valid City array"
+            passed = False
+            detail = f"unexpected response type: {type(body).__name__}"
 
-    elif "cities observed" in assertion or "len(" in assertion or "cities.length" in assertion:
+    elif any(kw in assertion_lower for kw in ("items observed", "count > 0", "len(")):
         count = len(body) if isinstance(body, list) else 0
         passed = count > 0
-        detail = f"{count} cities in response"
+        detail = f"{count} item(s) in response"
 
-    elif "cities.listed == true" in assertion:
-        passed = _evaluate_goal(Goal(id="_inline", expression="cities.listed == true"), world_state)
+    elif "==" in assertion_lower:
+        # Generic goal predicate evaluation against world state
+        passed = _evaluate_goal(Goal(id="_inline", expression=assertion), world_state)
         detail = "predicate evaluated against world state"
 
     else:
-        # Generic: pass if HTTP 200 and non-empty body
+        # Fallback: HTTP 200 + non-empty body
         passed = http_status == 200 and bool(body)
         detail = f"HTTP {http_status}, body={'non-empty' if body else 'empty'}"
 
@@ -478,21 +486,21 @@ async def _run_contract(
     await asyncio.sleep(0.05)
 
     # Goal-domain → capability-domain matching.
-    # Extract semantic domains from goal expressions.
+    # Extract the resource prefix from each goal expression's LHS.
+    # e.g. "services.listed == true"  → LHS = "services.listed" → domain prefix = "services"
+    #      "tasks.claimed == true"    → LHS = "tasks.claimed"   → domain prefix = "tasks"
     goal_domains: set[str] = set()
     for goal in contract.goals:
-        expr = goal.expression.lower()
-        # "cities.listed == true" → domain "city.collection"
-        for kw in ["cities", "city"]:
-            if kw in expr:
-                goal_domains.add("city.collection")
-        if "session" in expr:
-            goal_domains.add("session.lifecycle")
+        expr = goal.expression.strip().lower()
+        if "==" in expr:
+            lhs = expr.split("==")[0].strip()
+            # Take the first segment of the dotted path as the domain
+            goal_domains.add(lhs.split(".")[0])
 
     # Filter registry utilities whose capability domain intersects goal domains
     goal_compatible: list[Utility] = []
     for u in all_registry_utilities:
-        dom = _capability_domain(u)
+        dom = _capability_domain(u)  # e.g. "services", "service", "sessions"
         if dom in goal_domains:
             goal_compatible.append(u)
 
@@ -553,7 +561,7 @@ async def _run_contract(
     # ─────────────────────────────────────────────────────────────────
     yield _delta(thread_id, run_id, [{"op": "replace", "path": "/phase", "value": "executing"}])
 
-    resolver = UtilityResolver(_GASCITY_URL)
+    resolver = UtilityResolver(_API_URL)
     observations: list[dict] = []
     world_state: dict[str, Any] = {}
     execution_http_status: int = 0
@@ -562,7 +570,7 @@ async def _run_contract(
 
     for u in authorized:
         binding = resolver.resolve(u)
-        yield _text_chunk(mid, f"▶️  EXECUTE {u.id}  →  {binding.method} {_GASCITY_URL}{binding.path}\n")
+        yield _text_chunk(mid, f"▶️  EXECUTE {u.id}  →  {binding.method} {_API_URL}{binding.path}\n")
 
         start = time.perf_counter()
         result = await asyncio.get_event_loop().run_in_executor(None, binding.execute, {})
@@ -590,9 +598,17 @@ async def _run_contract(
             execution_body = body
             yield _text_chunk(mid, f"   ✅ HTTP {http_status}  ({round(latency * 1000)}ms)\n")
 
-            # Update world state — cities.listed = True when list is non-empty
+            # Update world state — derive key from goal expression LHS root
+            # e.g. "services.listed == true" → world_state["services"]["listed"] = True
             if isinstance(body, list):
-                world_state["cities"] = {"listed": len(body) > 0, "items": body, "count": len(body)}
+                # Use the first goal's LHS root as the state key
+                state_key = "items"
+                if contract.goals:
+                    expr = contract.goals[0].expression.strip().lower()
+                    if "==" in expr:
+                        lhs = expr.split("==")[0].strip()
+                        state_key = lhs.split(".")[0]
+                world_state[state_key] = {"listed": len(body) > 0, "items": body, "count": len(body)}
         else:
             execution_http_status = http_status
             execution_error = err or f"HTTP {http_status}"
@@ -612,10 +628,9 @@ async def _run_contract(
 
     # Fall back to default evidence requirements if none declared in contract
     evidence_reqs = contract.evidence_requirements or [
-        EvidenceRequirement(id="ev-http-ok",       assertion="response.status == 200"),
-        EvidenceRequirement(id="ev-schema-valid",  assertion="response.schema valid"),
-        EvidenceRequirement(id="ev-cities-observed", assertion="cities observed"),
-        EvidenceRequirement(id="ev-goal-predicate", assertion="cities.listed == true"),
+        EvidenceRequirement(id="ev-http-ok",      assertion="response.status == 200"),
+        EvidenceRequirement(id="ev-schema-valid", assertion="response.schema valid"),
+        EvidenceRequirement(id="ev-items",        assertion="items observed"),
     ]
 
     all_passed = True
@@ -683,10 +698,81 @@ def health():
         "status": "ok" if _REGISTRY else "degraded",
         "version": _AGENT_VERSION,
         "registry": _REGISTRY_COUNT,
-        "gascityUrl": _GASCITY_URL,
+        "apiUrl": _API_URL,
         "openapiSpec": str(_OPENAPI_PATH),
         "registryError": _REGISTRY_ERROR,
     }
+
+
+@app.get("/utilities")
+def list_utilities():
+    """
+    List all utilities currently projected into the runtime registry.
+
+    Returns the canonical projected utility list — the full set available
+    for goal-filtering and limit-authorization before any contract runs.
+    This is a read-only introspection endpoint; it does not execute any utility.
+    """
+    if _REGISTRY is None:
+        return {"error": "registry not loaded", "detail": _REGISTRY_ERROR, "utilities": []}
+
+    utilities = []
+    for reg_id, ut_data in _REGISTRY.utilities.items():
+        utilities.append({
+            "registryId":  reg_id,
+            "utilityId":   ut_data["operation_id"],
+            "type":        ut_data["type"],
+            "sideEffects": ut_data["side_effect"]["declared"],
+            "transport": {
+                "method": ut_data["transport"]["method"],
+                "path":   ut_data["transport"]["path"],
+            },
+            "domain":      ut_data["semantic_capabilities"].get("domain", ""),
+            "sourceUri":   ut_data["source_uri"],
+        })
+    return {"count": len(utilities), "utilities": utilities}
+
+
+@app.get("/registry")
+def registry_dump():
+    """
+    Return the full runtime registry as JSON.
+
+    Introspection endpoint for debugging importer projections. Shows every
+    field stored per utility including transport, side-effect tracking,
+    auth requirements, and semantic capability metadata.
+    Not intended for production use.
+    """
+    if _REGISTRY is None:
+        return {"error": "registry not loaded", "detail": _REGISTRY_ERROR}
+    return {"count": len(_REGISTRY.utilities), "registry": _REGISTRY.utilities}
+
+
+@app.get("/connections")
+def list_connections():
+    """
+    List active transport connections (base URLs) the agent can reach.
+
+    In the POC this is a single target (the API_URL from env).
+    In a production GluLess runtime this would enumerate all registered
+    connection descriptors (one per imported API spec or MCP server).
+    """
+    connections = []
+    if _REGISTRY:
+        # Derive distinct servers from projected utilities
+        seen: set[str] = set()
+        for ut_data in _REGISTRY.utilities.values():
+            server = _API_URL
+            if server not in seen:
+                seen.add(server)
+                connections.append({
+                    "id":       "default",
+                    "type":     "http",
+                    "baseUrl":  server,
+                    "specUri":  str(_OPENAPI_PATH),
+                    "status":   "configured",
+                })
+    return {"count": len(connections), "connections": connections}
 
 
 @app.post("/agent")

@@ -60,7 +60,7 @@ python3 -m http.server 3000 --directory demo/
 # open http://localhost:3000
 ```
 
-Click **"Load demo contract"** then **"Run Contract"** to execute.
+Click **"View contract"** to inspect the loaded contract, then **"Run contract"** to execute.
 
 ---
 
@@ -96,12 +96,12 @@ EVIDENCE=    HTTP status + observation
 
 ---
 
-## Connecting to a real GasCity
+## Connecting to a real API
 
-Set the environment variable before starting the agent:
+Set the agent URL before starting:
 
 ```bash
-GASCITY_BASE_URL=http://localhost:8000/v0 GASCITY_TOKEN=your-token \
+AGENT_API_BASE_URL=http://your-api-host/v0 \
   .venv/bin/uvicorn agent:app --reload --port 8080
 ```
 

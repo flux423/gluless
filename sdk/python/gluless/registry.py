@@ -8,14 +8,23 @@ class UtilityRegistry:
     """
     UtilityRegistry is a persistent knowledge plane for canonical Utility definitions.
     Caches capability descriptions from OpenAPI, GraphQL, MCP, etc.
+
+    Pass registry_path=":memory:" for a transient per-process registry that never
+    touches disk. The default persists to ~/.gluless/utility_registry.json.
     """
     def __init__(self, registry_path: Optional[str] = None):
-        if not registry_path:
+        if registry_path == ":memory:":
+            self.registry_path = ":memory:"
+            self._in_memory = True
+        elif not registry_path:
             self.registry_path = os.path.expanduser("~/.gluless/utility_registry.json")
+            self._in_memory = False
         else:
             self.registry_path = registry_path
-            
-        self._ensure_dir()
+            self._in_memory = False
+
+        if not self._in_memory:
+            self._ensure_dir()
         self.utilities: Dict[str, Dict[str, Any]] = self._load()
 
     def _ensure_dir(self):
@@ -24,6 +33,8 @@ class UtilityRegistry:
             os.makedirs(dir_name, exist_ok=True)
 
     def _load(self) -> Dict[str, Dict[str, Any]]:
+        if self._in_memory:
+            return {}
         if os.path.exists(self.registry_path):
             try:
                 with open(self.registry_path, "r", encoding="utf-8") as f:
@@ -33,9 +44,12 @@ class UtilityRegistry:
         return {}
 
     def save(self):
+        if self._in_memory:
+            return  # no-op for in-memory registry
         self._ensure_dir()
         with open(self.registry_path, "w", encoding="utf-8") as f:
             json.dump(self.utilities, f, indent=2)
+
 
     def register(
         self,
