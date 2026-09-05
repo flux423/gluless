@@ -97,16 +97,20 @@ class ExecutableBinding:
 class UtilityResolver:
     """
     Resolves a semantic Utility to an ExecutableBinding.
+
+    The server_url is treated as the full base URL including any path prefix
+    (e.g. http://localhost:8000/v0).  The utility transport path is appended
+    as a suffix.  This matches the OpenAPI 3.0 server/path composition model
+    where the operation path is relative to the server url.
     """
     def __init__(self, server_url: str):
-        self.server_url = server_url
+        # Normalise: strip trailing slash so we can do base + /path cleanly
+        self.server_url = server_url.rstrip("/")
 
     def resolve(self, utility: Utility) -> ExecutableBinding:
         t = utility.transport
-        # Use transport server if defined, otherwise fall back to target server_url
-        server = self.server_url
         return ExecutableBinding(
-            server=server,
+            server=self.server_url,
             method=t.method,
             path=t.path,
             parameters=t.parameters,

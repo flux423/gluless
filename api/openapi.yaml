@@ -3,31 +3,30 @@ openapi: 3.0.3
 info:
   title: GasCity API
   description: >
-    API for managing the GasCity agent platform and deployment rigs.
-    Consumed by the GluLess runtime as a Utility registry — each operation
-    maps to a declared Utility with an explicit type, side-effect class,
-    and binding (OpenAPI / HTTP).
+    GasCity platform API — manages cities and agent sessions.
+
+    GluLess binding metadata is declared per-operation via x-gluless-* extensions.
+    These annotations are consumed by the GluLess OpenAPI importer to project
+    Utility objects into the runtime registry.
+
+    Model:
+
+      OpenAPI contract    (this file — authoritative API definition)
+          ↓  x-gluless-* extensions
+      OpenAPIImporter     (sdk/python/gluless/importers/openapi.py)
+          ↓  Utility objects
+      UtilityRegistry     (runtime index, per-process)
+          ↓  ContextResolver
+      GluLess runtime
+
+    This file does NOT act as an independent Utility Registry.
   version: 0.2.0
 
 x-provider-name: GasCity
 
-x-gluless:
-  registry:
-    utilities:
-      - id: GasCity.cities.list
-        operationId: listCities
-        type: read
-        sideEffects: none
-        capability: city.collection.read
-      - id: GasCity.sessions.nudge
-        operationId: nudgeSession
-        type: mutation
-        sideEffects: external-message
-        capability: session.lifecycle.nudge
-
 servers:
   - url: http://localhost:8000/v0
-    description: Local development server
+    description: Local development server (mock)
 
 security:
   - ApiKeyAuth: []
@@ -38,29 +37,65 @@ paths:
     get:
       operationId: listCities
       summary: List all cities
-      description: >
-        Returns all cities registered in the GasCity network.
-
-        GluLess Utility: GasCity.cities.list
-        Type: read — no side effects, safe to retry.
+      description: Returns all cities registered in the GasCity network.
+      # GluLess binding metadata — consumed by OpenAPIImporter
+      x-gluless-name: GasCity.cities.list
+      x-gluless-type: read
+      x-gluless-side-effects: none
       tags:
         - cities
       responses:
         '200':
-          description: Successful — array of City objects
+          description: Array of City objects
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/City'
-              example:
-                - name: blucity
-                  health: healthy
-                - name: gas-town
-                  health: degraded
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /cities/{name}:
+    post:
+      operationId: createCity
+      summary: Create a city
+      description: >
+        Register a new city in the GasCity network.
+        This is a state-mutating operation; it is denied by default under
+        the demo contract's "deny *" limit and requires explicit allow.
+      # GluLess binding metadata — consumed by OpenAPIImporter
+      x-gluless-name: GasCity.city.create
+      x-gluless-type: mutation
+      x-gluless-side-effects: create
+      tags:
+        - cities
+      parameters:
+        - name: name
+          in: path
+          description: City slug (unique identifier).
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CityCreate'
+      responses:
+        '201':
+          description: City created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/City'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '409':
+          description: City name already exists
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -69,22 +104,22 @@ paths:
       operationId: nudgeSession
       summary: Nudge a session
       description: >
-        Request a session nudge or restart by session ID.
-
-        GluLess Utility: GasCity.sessions.nudge
-        Type: mutation — produces an external message, not idempotent.
-        Limits: requires explicit allow by contract; denied by "deny *" by default.
+        Request a session nudge or restart. Produces an external message.
+        Denied by default under "deny *"; requires explicit allow limit.
+      # GluLess binding metadata — consumed by OpenAPIImporter
+      x-gluless-name: GasCity.sessions.nudge
+      x-gluless-type: mutation
+      x-gluless-side-effects: external_message
       tags:
         - sessions
       parameters:
         - name: id
           in: path
-          description: Unique session identifier.
+          description: Session UUID.
           required: true
           schema:
             type: string
             format: uuid
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
       requestBody:
         required: true
         content:
@@ -111,7 +146,8 @@ paths:
     get:
       operationId: healthCheck
       summary: Health check
-      description: Returns the operational status of the GasCity API server.
+      description: Returns operational status. Not a GluLess utility — excluded from registry.
+      x-gluless-exclude: true
       tags:
         - meta
       security: []
@@ -131,8 +167,8 @@ components:
       in: header
       name: X-GasCity-Token
       description: >
-        Service token issued by GasCity. Required on all endpoints except /health.
-        Injected by the GluLess runtime from environment variable GASCITY_TOKEN.
+        Service token issued by GasCity. Injected by GluLess runtime
+        from environment variable GASCITY_TOKEN.
 
   responses:
     UnauthorizedError:
@@ -141,10 +177,6 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-          example:
-            error: unauthorized
-            message: X-GasCity-Token is missing or does not match
-
     InternalError:
       description: Unexpected server error
       content:
@@ -156,37 +188,39 @@ components:
 
     City:
       type: object
-      description: A city registered in the GasCity network.
       required:
         - name
         - health
       properties:
         name:
           type: string
-          description: Unique city identifier / slug.
           example: blucity
         health:
           type: string
-          description: Current operational health of the city.
           enum: [healthy, degraded, down]
           example: healthy
         version:
           type: string
-          description: Deployed platform version string.
           example: v0.1.4
         agents:
           type: integer
-          description: Number of active agent sessions in this city.
           example: 3
+
+    CityCreate:
+      type: object
+      required:
+        - health
+      properties:
+        health:
+          type: string
+          enum: [healthy, degraded, down]
+          default: healthy
 
     NudgeRequest:
       type: object
       properties:
         force:
           type: boolean
-          description: >
-            Force nudge even if the session has active tasks.
-            Use with caution — may interrupt in-flight work.
           default: false
 
     NudgeResult:
@@ -202,10 +236,8 @@ components:
         sessionId:
           type: string
           format: uuid
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
         message:
           type: string
-          example: Session nudged successfully
 
     HealthResponse:
       type: object
@@ -223,7 +255,6 @@ components:
         uptime:
           type: integer
           description: Server uptime in seconds.
-          example: 3600
 
     ErrorResponse:
       type: object
@@ -232,7 +263,5 @@ components:
       properties:
         error:
           type: string
-          example: unauthorized
         message:
           type: string
-          example: X-GasCity-Token is missing or does not match

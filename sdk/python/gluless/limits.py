@@ -1,71 +1,103 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List, Optional
 from gluless.models import Contract, Utility, SideEffectType
 
 @dataclass
 class LimitDecision:
-    effect: str  # "allow", "deny", "approval_required", "indeterminate"
+    effect: str  # "allow" | "deny" | "approval_required" | "indeterminate"
     utility: str
     reason: str
+    limit_id: Optional[str] = None
     constraints: List[str] = field(default_factory=list)
+
 
 class LimitEvaluator:
     """
-    Evaluates proposed utility invocations against Contract Limits.
-    Enforces secure defaults: mutations are denied by default unless explicitly allowed.
+    Evaluate a utility invocation against Contract Limits.
+
+    Evaluation model
+    ----------------
+    Limits are processed in **declaration order**.  Each matching rule
+    updates the current decision; the **last** matching rule wins.
+
+    This is the correct model for the canonical "deny *, allow X" pattern:
+
+        deny *                     → tentative DENY (matches everything)
+        allow GasCity.cities.list  → overrides → ALLOW
+
+    Result for GasCity.cities.list:  ALLOW
+    Result for GasCity.city.create:  DENY  (only `deny *` matched)
+    Result for GasCity.sessions.nudge: DENY (only `deny *` matched)
+
+    Secure default
+    --------------
+    If no limit matches at all:
+      - READ / no-side-effect utilities → ALLOW  (observing state is safe)
+      - MUTATION / UNKNOWN              → DENY   (writing requires explicit consent)
     """
+
     def __init__(self, contract: Contract):
         self.contract = contract
 
+    def _matches(self, pattern_action: str, utility: Utility) -> bool:
+        """Return True when pattern_action applies to this utility."""
+        p = pattern_action.lower().strip()
+        if p == "*":
+            return True
+        uid = utility.id.lower()
+        if p == uid or p in uid:
+            return True
+        if p == utility.side_effects.value:
+            return True
+        if p == utility.type.value:
+            return True
+        return False
+
     def evaluate(self, utility: Utility) -> LimitDecision:
-        # Determine if the utility has side effects (is a mutation)
-        is_safe = utility.side_effects in (SideEffectType.NONE, SideEffectType.READ)
+        is_safe    = utility.side_effects in (SideEffectType.NONE, SideEffectType.READ)
         is_unknown = utility.side_effects == SideEffectType.UNKNOWN
 
-        # Check explicit denies first
+        # Process limits in declaration order — last match wins.
+        current_effect:   str                = ""
+        current_reason:   str                = ""
+        current_limit_id: Optional[str]      = None
+
         for limit in self.contract.limits:
-            pattern = limit.action_pattern.lower()
+            pattern = limit.action_pattern.strip().lower()
+
             if pattern.startswith("deny "):
-                denied_action = pattern[5:].strip()
-                # Deny if pattern matches utility ID or side effect type
-                if denied_action == "*" or denied_action in utility.id.lower() or denied_action == utility.side_effects.value:
-                    return LimitDecision(
-                        effect="deny",
-                        utility=utility.id,
-                        reason=f"Explicitly denied by limit '{limit.id}' ({limit.action_pattern})"
-                    )
+                action = pattern[5:].strip()
+                if self._matches(action, utility):
+                    current_effect   = "deny"
+                    current_reason   = f"Denied by limit '{limit.id}' ({limit.action_pattern})"
+                    current_limit_id = limit.id
 
-        # Check explicit allows
-        explicitly_allowed = False
-        allow_reason = ""
-        for limit in self.contract.limits:
-            pattern = limit.action_pattern.lower()
-            if pattern.startswith("allow "):
-                allowed_action = pattern[6:].strip()
-                if allowed_action == "*" or allowed_action in utility.id.lower() or allowed_action == utility.side_effects.value:
-                    explicitly_allowed = True
-                    allow_reason = f"Explicitly allowed by limit '{limit.id}' ({limit.action_pattern})"
-                    break
+            elif pattern.startswith("allow "):
+                action = pattern[6:].strip()
+                if self._matches(action, utility):
+                    current_effect   = "allow"
+                    current_reason   = f"Allowed by limit '{limit.id}' ({limit.action_pattern})"
+                    current_limit_id = limit.id
 
-        if explicitly_allowed:
+        if current_effect:
             return LimitDecision(
-                effect="allow",
+                effect=current_effect,
                 utility=utility.id,
-                reason=allow_reason
+                reason=current_reason,
+                limit_id=current_limit_id,
             )
 
-        # If it is a safe read operation (and not explicitly denied), allow it by default
+        # No limit matched — apply secure defaults
         if is_safe and not is_unknown:
             return LimitDecision(
                 effect="allow",
                 utility=utility.id,
-                reason="Safe observation capability permitted by default"
+                reason="No limit matched; safe read-only capability permitted by default",
             )
 
-        # Secure default: block any mutation or unknown side effect that wasn't explicitly allowed
         effect_name = "unknown" if is_unknown else utility.side_effects.value
         return LimitDecision(
             effect="deny",
             utility=utility.id,
-            reason=f"Implicitly denied: mutation/unknown effect '{effect_name}' requires explicit allow limit"
+            reason=f"No limit matched; mutation/unknown effect '{effect_name}' denied by default",
         )
