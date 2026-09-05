@@ -279,6 +279,14 @@ html, body {
   color: var(--accent-green);
 }
 
+.phase-step.warning {
+  color: var(--accent-amber);
+}
+
+.phase-step.error {
+  color: var(--accent-red);
+}
+
 .phase-dot {
   width: 8px;
   height: 8px;
@@ -298,6 +306,18 @@ html, body {
 .phase-step.done .phase-dot {
   background: var(--accent-green);
   border-color: var(--accent-green);
+}
+
+.phase-step.warning .phase-dot {
+  background: var(--accent-amber);
+  border-color: var(--accent-amber);
+  box-shadow: 0 0 8px var(--accent-amber);
+}
+
+.phase-step.error .phase-dot {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+  box-shadow: 0 0 8px rgba(248,113,113,0.6);
 }
 
 @keyframes pulse-phase {
@@ -705,6 +725,7 @@ html, body {
 }
 
 .state-phase-badge.phase-complete { background: rgba(52,211,153,0.12); color: var(--accent-green); }
+.state-phase-badge.phase-warning  { background: rgba(251,191,36,0.12);  color: var(--accent-amber); }
 .state-phase-badge.phase-error    { background: rgba(248,113,113,0.12); color: var(--accent-red); }
 .state-phase-badge.phase-executing { animation: badge-pulse 1s ease-in-out infinite; }
 

@@ -189,24 +189,20 @@ function handleEvent(event) {
       setStatus('running', 'Running…');
       break;
 
+    // Protocol signals — track state only, no visible row
     case 'TEXT_MESSAGE_START':
       currentMessageId = event.messageId;
-      currentChunkEl = null;
-      appendEventRow(type, `messageId=${event.messageId?.slice(0,8)}…`);
       break;
-
-    case 'TEXT_MESSAGE_CHUNK': {
-      // Each chunk is its own log row — reads like a live terminal
-      const delta = event.delta || '';
-      if (delta.trim()) {
-        appendChunkLine(delta);
-      }
-      break;
-    }
 
     case 'TEXT_MESSAGE_END':
       currentMessageId = null;
       break;
+
+    case 'TEXT_MESSAGE_CHUNK': {
+      const delta = event.delta || '';
+      if (delta.trim()) appendChunkLine(delta);
+      break;
+    }
 
     case 'STATE_SNAPSHOT': {
       const s = event.snapshot || {};
@@ -222,14 +218,32 @@ function handleEvent(event) {
     }
 
     case 'STATE_DELTA': {
-      appendEventRow(type, `ops=${event.delta?.length || 0}`);
+      // Extract human-readable summary from JSON Patch ops
+      const ops = event.delta || [];
+      const summary = ops.map(op => {
+        const field = op.path?.replace('/', '') || '?';
+        const val = typeof op.value === 'object'
+          ? `[${Array.isArray(op.value) ? op.value.length + ' items' : 'object'}]`
+          : String(op.value);
+        return `${field} → ${val}`;
+      }).join('  │  ');
+      appendEventRow(type, summary || `${ops.length} op(s)`);
+      // Apply any phase changes from delta immediately
+      const phaseOp = ops.find(op => op.path === '/phase');
+      if (phaseOp?.value) setPhase(phaseOp.value);
       break;
     }
 
     case 'RUN_FINISHED':
-      appendEventRow(type, event.warning ? `⚠️ ${event.warning}` : '✅ success');
-      setPhase('complete');
-      setStatus('online', 'Agent ready');
+      if (event.warning) {
+        appendEventRow(type, `⚠️ ${event.warning}`);
+        setPhase('warning');
+        setStatus('online', 'Agent ready');
+      } else {
+        appendEventRow(type, '✅ success');
+        setPhase('complete');
+        setStatus('online', 'Agent ready');
+      }
       break;
 
     case 'RUN_ERROR':
@@ -339,18 +353,28 @@ function escHtml(s) {
 }
 
 // ── Phase tracker ─────────────────────────────────
-const PHASE_ORDER = ['idle', 'compiling', 'planning', 'executing', 'complete', 'error'];
+// Progression steps (in order). Terminal states are separate.
+const PHASE_STEPS    = ['idle', 'compiling', 'planning', 'executing', 'complete'];
+const PHASE_TERMINAL = new Set(['complete', 'warning', 'error']);
 
 function setPhase(phase) {
   const steps = document.querySelectorAll('.phase-step');
-  const idx = PHASE_ORDER.indexOf(phase);
+  const isTerminal = PHASE_TERMINAL.has(phase);
+  const progIdx = PHASE_STEPS.indexOf(phase); // -1 for warning/error
 
   steps.forEach(el => {
     const p = el.dataset.phase;
-    const pIdx = PHASE_ORDER.indexOf(p);
-    el.classList.remove('active', 'done');
-    if (p === phase) el.classList.add('active');
-    else if (pIdx < idx && phase !== 'error') el.classList.add('done');
+    el.classList.remove('active', 'done', 'warning', 'error');
+
+    if (p === phase) {
+      // The matching step: mark with the right class
+      el.classList.add(isTerminal && phase !== 'complete' ? phase : 'active');
+    } else if (PHASE_STEPS.includes(p)) {
+      // A progression step: mark done if it came before the current phase
+      const pIdx = PHASE_STEPS.indexOf(p);
+      const cutoff = isTerminal ? PHASE_STEPS.length : progIdx;
+      if (pIdx < cutoff) el.classList.add('done');
+    }
   });
 
   $phaseBadge.textContent = phase;
@@ -358,7 +382,9 @@ function setPhase(phase) {
 }
 
 function resetPhases() {
-  document.querySelectorAll('.phase-step').forEach(el => el.classList.remove('active','done'));
+  document.querySelectorAll('.phase-step').forEach(el =>
+    el.classList.remove('active', 'done', 'warning', 'error')
+  );
   $phaseBadge.textContent = '—';
   $phaseBadge.className = 'state-phase-badge';
 }
