@@ -40,17 +40,51 @@ class LimitEvaluator:
         self.contract = contract
 
     def _matches(self, pattern_action: str, utility: Utility) -> bool:
-        """Return True when pattern_action applies to this utility."""
+        """
+        Return True when pattern_action applies to this utility.
+
+        Matching rules (evaluated in order, first match returns):
+          *                wildcard — matches everything
+          Prefix.*         namespace glob — matches any utility whose ID
+                           starts with Prefix (case-insensitive)
+          exact.id         exact utility ID match
+          substring        substring match within the utility ID
+          side-effect      matches the utility's side_effects value
+          type             matches the utility's type value
+
+        Examples:
+          *                       matches GasCity.cities.list
+          GasCity.*               matches GasCity.cities.list, GasCity.city.create
+          GasCity.cities.list     matches GasCity.cities.list only (also via substring)
+          create                  matches GasCity.city.create (side_effects == create)
+        """
         p = pattern_action.lower().strip()
+        uid = utility.id.lower()
+
         if p == "*":
             return True
-        uid = utility.id.lower()
-        if p == uid or p in uid:
+
+        # Namespace glob: "GasCity.*" → prefix = "gascity"
+        if p.endswith(".*"):
+            prefix = p[:-2].rstrip(".")
+            return uid == prefix or uid.startswith(prefix + ".")
+
+        # Exact match
+        if p == uid:
             return True
+
+        # Substring match on utility ID
+        if p in uid:
+            return True
+
+        # Match on side-effect class (e.g. "create", "external_message")
         if p == utility.side_effects.value:
             return True
+
+        # Match on utility type ("read", "mutation")
         if p == utility.type.value:
             return True
+
         return False
 
     def evaluate(self, utility: Utility) -> LimitDecision:

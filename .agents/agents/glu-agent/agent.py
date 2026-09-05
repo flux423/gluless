@@ -145,11 +145,25 @@ def _build_registry() -> tuple[UtilityRegistry, list[Utility]]:
 
 
 def _capability_domain(u: Utility) -> str:
-    """Map a utility to a semantic capability domain."""
-    name = u.id.lower()
-    if "cities" in name or "city" in name:
+    """
+    Map a Utility to a semantic capability domain.
+
+    Uses the resource segment of the utility ID (after the namespace prefix)
+    so that 'GasCity' in the namespace does not substring-match 'city' and
+    produce false positives for unrelated resources like sessions.nudge.
+
+    e.g.:
+      GasCity.cities.list   → resource_key = "cities.list"  → city.collection
+      GasCity.city.create   → resource_key = "city.create"  → city.collection
+      GasCity.sessions.nudge → resource_key = "sessions.nudge" → session.lifecycle
+    """
+    parts = u.id.split(".")
+    # Everything after the first segment (the namespace)
+    resource_key = ".".join(parts[1:]).lower() if len(parts) > 1 else u.id.lower()
+
+    if resource_key.startswith("cities") or resource_key.startswith("city"):
         return "city.collection"
-    if "session" in name:
+    if resource_key.startswith("session"):
         return "session.lifecycle"
     return u.namespace.lower()
 
