@@ -46,33 +46,33 @@ GluLess aims to reduce that layer by making stable capabilities and executable c
 Instead of:
 
 ```python
-response = requests.get("/cities")
+response = requests.get("/services")
 response.raise_for_status()
-cities = response.json()
+services = response.json()
 
-for city in cities:
-    if city["health"] != "healthy":
+for s in services:
+    if s["status"] != "healthy":
         ...
 ```
 
 GluLess supports:
 
 ```glu
-goal CitiesListed {
+goal ServicesHealthy {
     target:
-        cities.listed == true
+        services.healthy == true
 
     limits:
         deny *
-        allow CityAPI.cities.list
+        allow Monitoring.services.list
 
     utilities:
-        CityAPI.cities.list
+        Monitoring.services.list
 
     evidence:
         response.status == 200
         response.schema valid
-        cities observed
+        services observed
 }
 ```
 
@@ -99,7 +99,6 @@ artifact exists
 incident is resolved
 deployment succeeds
 customer request is satisfied
-cities are listed
 ```
 
 A Goal is the destination.
@@ -134,9 +133,10 @@ Example:
 ```glu
 limits {
     deny *
-    allow CityAPI.cities.list
-    require approval for CityAPI.cities.create
-    deny infrastructure.*
+    allow Work.tasks.read
+    allow Work.tasks.claim
+    require approval for Deployment.promote
+    deny Infrastructure.destroy
 }
 ```
 
@@ -145,11 +145,11 @@ Limits are enforced by the runtime, not left to model judgment alone.
 The evaluation model is **declaration order, last match wins**:
 
 ```text
-deny *                    ← matches everything
-allow CityAPI.cities.list ← overrides for this specific utility → ALLOWED
+deny *                  ← matches everything
+allow Work.tasks.read   ← overrides for this specific utility → ALLOWED
 ```
 
-Other utilities only matched `deny *` → DENIED. Neither guess nor model judgment. The runtime decides.
+Everything else only matched `deny *` → DENIED. Neither guess nor model judgment. The runtime decides.
 
 ---
 
@@ -180,7 +180,7 @@ A Utility describes what can be done, not how it is implemented internally.
 For example:
 
 ```text
-CityAPI.cities.list
+Monitoring.services.list
 ```
 
 may resolve to an HTTP API today and a different transport later without changing the GluLess contract.
@@ -286,10 +286,10 @@ Do not build around it.
 A contract should depend on:
 
 ```text
-CityAPI.cities.list
-Work.tasks.claim
+Work.tasks.list
+Monitoring.services.inspect
 Memory.search
-Deployment.inspect
+Deployment.status
 ```
 
 not on:
@@ -533,18 +533,11 @@ Interface compatibility is what matters.
 
 The first Utility adapter is OpenAPI.
 
-Given:
+Given any OpenAPI spec, GluLess derives typed Utilities:
 
 ```text
-GET  /cities
-POST /cities/{name}
-```
-
-GluLess exposes:
-
-```text
-CityAPI.cities.list
-CityAPI.city.create
+GET  /services        →  Monitoring.services.list
+POST /deployments     →  Deployment.deployments.create
 ```
 
 The importer derives:
