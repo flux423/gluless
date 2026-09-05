@@ -1,10 +1,6 @@
 /**
- * GluLess Demo — app.js
- * AG-UI streaming client
- *
- * Connects to the GLU Agent via POST + SSE (text/event-stream).
- * Renders AG-UI events into the stream log.
- * Updates sidebar state in real time.
+ * GluLess Agent Console — app.js
+ * AG-UI SSE streaming client (redesigned)
  */
 
 const AGENT_URL = 'http://localhost:8080/agent';
@@ -29,411 +25,419 @@ utilities:
 evidence_requirements:
   - id: ev-http-ok
     assertion: "response.status == 200"
-    description: "GasCity responded with HTTP 200"
-`.trim();
+    description: "GasCity responded with HTTP 200"`.trim();
 
-// ── State ─────────────────────────────────────────
-let isRunning = false;
-let eventCount = 0;
-let currentMessageId = null;
-let abortController = null;
+// ── State ─────────────────────────────────────────────
+let isRunning   = false;
+let eventCount  = 0;
+let abortCtrl   = null;
+let lineIndex   = 0;
 
-// ── DOM refs ──────────────────────────────────────
-const $log     = document.getElementById('stream-log');
-const $btnRun  = document.getElementById('btn-run');
-const $btnClear = document.getElementById('btn-clear');
-const $btnLoadDemo = document.getElementById('btn-load-demo');
-const $input   = document.getElementById('contract-input');
-const $status  = document.getElementById('agent-status');
-const $statePanel = document.getElementById('state-panel');
-const $phaseBadge = document.getElementById('state-phase-badge');
-const $metricPlan  = document.getElementById('metric-plan');
-const $metricObs   = document.getElementById('metric-obs');
-const $metricEv    = document.getElementById('metric-ev');
-const $metricEvts  = document.getElementById('metric-events');
-const $evidencePanel = document.getElementById('evidence-panel');
-const $tabContract = document.getElementById('tab-contract');
-const $tabNatural  = document.getElementById('tab-natural');
+// ── DOM ───────────────────────────────────────────────
+const $input     = document.getElementById('contract-input');
+const $btnRun    = document.getElementById('btn-run');
+const $runIcon   = document.getElementById('run-icon');
+const $runLabel  = document.getElementById('run-label');
+const $btnClear  = document.getElementById('btn-clear');
+const $btnLoad   = document.getElementById('btn-load-demo');
+const $body      = document.getElementById('terminal-body');
+const $gutter    = document.getElementById('terminal-gutter');
+const $agentPill = document.getElementById('agent-pill');
+const $pillDot   = $agentPill.querySelector('.pill-dot');
+const $pillLabel = document.getElementById('agent-pill-label');
 
-// ── Init ──────────────────────────────────────────
+// Inspector refs
+const $valId     = document.getElementById('val-id');
+const $valGoal   = document.getElementById('val-goal');
+const $limitList = document.getElementById('limits-list');
+const $utilList  = document.getElementById('utilities-list');
+const $evSection = document.getElementById('evidence-section');
+const $evList    = document.getElementById('evidence-list');
+const $metrics   = document.getElementById('metrics-block');
+const $mPlan     = document.getElementById('m-plan');
+const $mObs      = document.getElementById('m-obs');
+const $mEv       = document.getElementById('m-ev');
+const $mEvents   = document.getElementById('m-events');
+
+// Phase strip refs
+const $pips = document.querySelectorAll('.phase-pip');
+
+// ── Boot ──────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   pingAgent();
   $btnRun.addEventListener('click', onRunClick);
   $btnClear.addEventListener('click', onClear);
-  $btnLoadDemo.addEventListener('click', () => {
-    $input.value = DEMO_CONTRACT;
-    $input.style.rows = 10;
-    $btnRun.disabled = false;
-  });
+  $btnLoad.addEventListener('click', loadDemo);
   $input.addEventListener('input', () => {
-    $btnRun.disabled = $input.value.trim().length === 0;
+    $btnRun.disabled = !$input.value.trim();
   });
-  $tabContract.addEventListener('click', () => switchTab('contract'));
-  $tabNatural.addEventListener('click', () => switchTab('natural'));
-  $input.addEventListener('keydown', (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+  $input.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !$btnRun.disabled) {
       e.preventDefault();
-      if (!$btnRun.disabled) onRunClick();
+      onRunClick();
     }
   });
+  document.getElementById('ctab-contract').addEventListener('click', () => switchTab('contract'));
+  document.getElementById('ctab-natural').addEventListener('click', () => switchTab('natural'));
 });
 
-// ── Agent ping ────────────────────────────────────
+function loadDemo() {
+  $input.value = DEMO_CONTRACT;
+  $input.rows = 8;
+  $btnRun.disabled = false;
+}
+
+function switchTab(mode) {
+  document.querySelectorAll('.ctab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`ctab-${mode}`).classList.add('active');
+  $input.spellcheck = mode === 'natural';
+  $input.placeholder = mode === 'contract'
+    ? 'Paste a GLU contract YAML…'
+    : 'Describe what you want to achieve…';
+}
+
+// ── Agent ping ────────────────────────────────────────
 async function pingAgent() {
   try {
-    const res = await fetch(`${AGENT_URL.replace('/agent', '/health')}`, { signal: AbortSignal.timeout(3000) });
-    if (res.ok) setStatus('online', 'Agent ready');
-    else setStatus('error', 'Agent error');
+    const res = await fetch(AGENT_URL.replace('/agent', '/health'),
+      { signal: AbortSignal.timeout(3000) });
+    if (res.ok) setAgentStatus('online', 'Ready');
+    else setAgentStatus('error', 'Error');
   } catch {
-    setStatus('offline', 'Agent offline');
+    setAgentStatus('offline', 'Offline');
   }
 }
 
-function setStatus(type, label) {
-  const dot = $status.querySelector('.status-dot');
-  dot.className = `status-dot ${type}`;
-  $status.querySelector('span').textContent = label;
+function setAgentStatus(state, label) {
+  $pillDot.className = `pill-dot ${state}`;
+  $pillLabel.textContent = label;
 }
 
-// ── Tab switching ─────────────────────────────────
-function switchTab(mode) {
-  [$tabContract, $tabNatural].forEach(t => t.classList.remove('active'));
-  if (mode === 'contract') {
-    $tabContract.classList.add('active');
-    $input.placeholder = 'Paste a GLU contract YAML here…';
-    $input.spellcheck = false;
-  } else {
-    $tabNatural.classList.add('active');
-    $input.placeholder = 'Describe your goal in natural language, e.g. "List all cities in GasCity"';
-    $input.spellcheck = true;
-  }
-}
-
-// ── Run ───────────────────────────────────────────
+// ── Run ───────────────────────────────────────────────
 async function onRunClick() {
-  if (isRunning) {
-    abortController?.abort();
-    return;
-  }
+  if (isRunning) { abortCtrl?.abort(); return; }
 
-  const userMessage = $input.value.trim();
-  if (!userMessage) return;
+  const msg = $input.value.trim();
+  if (!msg) return;
 
   startRun();
 
   const threadId = crypto.randomUUID();
   const runId    = crypto.randomUUID();
-
-  abortController = new AbortController();
+  abortCtrl = new AbortController();
 
   try {
-    const response = await fetch(AGENT_URL, {
+    const res = await fetch(AGENT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
       body: JSON.stringify({
-        threadId,
-        runId,
-        messages: [{ role: 'user', content: userMessage }],
-        context: [],
-        tools: [],
-        state: null,
+        threadId, runId,
+        messages: [{ role: 'user', content: msg }],
+        context: [], tools: [], state: null,
       }),
-      signal: abortController.signal,
+      signal: abortCtrl.signal,
     });
 
-    if (!response.ok) {
-      appendError(`HTTP ${response.status}: ${await response.text()}`);
-      endRun();
-      return;
+    if (!res.ok) {
+      logError(`HTTP ${res.status}: ${await res.text()}`);
+      endRun(); return;
     }
 
-    const reader = response.body.getReader();
+    const reader  = res.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buf = '';
 
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
       for (const line of lines) {
         if (line.startsWith('data: ')) {
-          try {
-            const event = JSON.parse(line.slice(6));
-            handleEvent(event);
-          } catch { /* skip malformed */ }
+          try { handleEvent(JSON.parse(line.slice(6))); }
+          catch { /* skip */ }
         }
       }
     }
   } catch (err) {
     if (err.name !== 'AbortError') {
-      appendError(`Connection error: ${err.message}\n\nIs the GLU agent running? Start it with:\n  cd .agents/agents/glu-agent && uvicorn agent:app --reload --port 8080`);
+      logError(`Connection failed: ${err.message}\n\nStart the agent:\n  cd .agents/agents/glu-agent\n  .venv/bin/uvicorn agent:app --reload --port 8080`);
     }
   } finally {
     endRun();
   }
 }
 
-// ── Event handlers ────────────────────────────────
+function startRun() {
+  isRunning = true;
+  eventCount = 0;
+  lineIndex = 0;
+  clearEmpty();
+  $btnRun.classList.add('stop');
+  $runIcon.textContent = '◼';
+  $runLabel.textContent = 'Stop';
+  $btnRun.disabled = false;
+  setAgentStatus('running', 'Running');
+}
+
+function endRun() {
+  isRunning = false;
+  $btnRun.classList.remove('stop');
+  $runIcon.textContent = '▶';
+  $runLabel.textContent = 'Run';
+  pingAgent();
+}
+
+// ── Event dispatch ────────────────────────────────────
 function handleEvent(event) {
   eventCount++;
-  $metricEvts.textContent = eventCount;
+  bump($mEvents, eventCount);
 
   const { type } = event;
 
   switch (type) {
+
     case 'RUN_STARTED':
-      appendEventRow(type, `thread=${event.threadId?.slice(0,8)}…  run=${event.runId?.slice(0,8)}…`);
+      logRow('RUN_STARTED', 'b-RUN_STARTED',
+        `thread=${event.threadId?.slice(0,8)}…  run=${event.runId?.slice(0,8)}…`);
       setPhase('compiling');
-      setStatus('running', 'Running…');
       break;
 
-    // Protocol signals — track state only, no visible row
+    // Protocol signals — silent
     case 'TEXT_MESSAGE_START':
-      currentMessageId = event.messageId;
-      break;
-
     case 'TEXT_MESSAGE_END':
-      currentMessageId = null;
       break;
 
     case 'TEXT_MESSAGE_CHUNK': {
-      const delta = event.delta || '';
-      if (delta.trim()) appendChunkLine(delta);
+      const delta = (event.delta || '').replace(/\n$/, '');
+      if (!delta.trim()) break;
+      // Split on embedded newlines — each line is its own row
+      for (const line of delta.split('\n')) {
+        if (!line.trim()) continue;
+        const bodyClass = line.startsWith('✅') ? 'ok'
+          : line.startsWith('⚠') ? 'warn'
+          : line.startsWith('❌') ? 'err'
+          : '';
+        logChunk(line, bodyClass);
+      }
       break;
     }
 
     case 'STATE_SNAPSHOT': {
       const s = event.snapshot || {};
       setPhase(s.phase || 'idle');
-      $metricPlan.textContent = s.plan?.length || 0;
-      $metricObs.textContent  = s.observations?.length || 0;
-      $metricEv.textContent   = s.evidence?.length || 0;
-      $statePanel.style.display = 'block';
-      updateSidebarFromState(s);
-      appendEventRow(type, `phase=${s.phase}  goals=${s.goals?.length}  utilities=${s.utilities?.length}`);
+      bump($mPlan, s.plan?.length || 0);
+      bump($mObs,  s.observations?.length || 0);
+      bump($mEv,   s.evidence?.length || 0);
+      $metrics.style.display = 'grid';
+      syncInspector(s);
+      logRow('SNAPSHOT', 'b-STATE_SNAPSHOT',
+        `phase=${s.phase}  goals=${s.goals?.length}  utilities=${s.utilities?.length}`);
       renderEvidence(s.evidence || []);
       break;
     }
 
     case 'STATE_DELTA': {
-      // Extract human-readable summary from JSON Patch ops
       const ops = event.delta || [];
       const summary = ops.map(op => {
         const field = op.path?.replace('/', '') || '?';
-        const val = typeof op.value === 'object'
-          ? `[${Array.isArray(op.value) ? op.value.length + ' items' : 'object'}]`
+        const val   = typeof op.value === 'object'
+          ? `[${Array.isArray(op.value) ? op.value.length + ' item(s)' : 'object'}]`
           : String(op.value);
         return `${field} → ${val}`;
-      }).join('  │  ');
-      appendEventRow(type, summary || `${ops.length} op(s)`);
-      // Apply any phase changes from delta immediately
-      const phaseOp = ops.find(op => op.path === '/phase');
+      }).join('  ·  ');
+      logRow('DELTA', 'b-STATE_DELTA', summary || `${ops.length} op(s)`);
+      const phaseOp = ops.find(o => o.path === '/phase');
       if (phaseOp?.value) setPhase(phaseOp.value);
       break;
     }
 
     case 'RUN_FINISHED':
       if (event.warning) {
-        appendEventRow(type, `⚠️ ${event.warning}`);
+        logRow('FINISHED', 'b-RUN_FINISHED_W', event.warning);
         setPhase('warning');
-        setStatus('online', 'Agent ready');
       } else {
-        appendEventRow(type, '✅ success');
+        logRow('FINISHED', 'b-RUN_FINISHED', 'success');
         setPhase('complete');
-        setStatus('online', 'Agent ready');
       }
+      setAgentStatus('online', 'Ready');
       break;
 
     case 'RUN_ERROR':
-      appendEventRow(type, `${event.code}: ${event.message}`);
+      logError(`${event.code || 'ERROR'}: ${event.message}`);
       setPhase('error');
-      setStatus('error', 'Error');
+      setAgentStatus('error', 'Error');
       break;
 
     default:
-      appendEventRow(type, JSON.stringify(event).slice(0, 120));
+      logRow(type, 'b-STATE_SNAPSHOT', JSON.stringify(event).slice(0, 100));
   }
 }
 
-// ── DOM helpers ───────────────────────────────────
-function startRun() {
-  isRunning = true;
-  eventCount = 0;
-  $btnRun.innerHTML = '<span class="btn-icon">◼</span> Stop';
-  $btnRun.classList.add('running');
-  $btnRun.disabled = false;
-  clearWelcome();
-  setStatus('running', 'Connecting…');
-}
-
-function endRun() {
-  isRunning = false;
-  $btnRun.innerHTML = '<span class="btn-icon">▶</span> Run Contract';
-  $btnRun.classList.remove('running');
-  if (isRunning === false) setStatus('online', 'Agent ready');
-  pingAgent();
-}
-
-function clearWelcome() {
-  const w = $log.querySelector('.stream-welcome');
-  if (w) w.remove();
+// ── DOM helpers ───────────────────────────────────────
+function clearEmpty() {
+  document.getElementById('term-empty')?.remove();
 }
 
 function onClear() {
-  $log.innerHTML = '<div class="stream-welcome"><div class="welcome-icon">⬡</div><h2>Ready to execute</h2><p>Enter a GLU contract below or use the pre-loaded demo contract.</p><div class="welcome-pills"><span class="pill">AG-UI Protocol</span><span class="pill">SSE Streaming</span><span class="pill">GLU Contracts</span><span class="pill">A2UI Ready</span></div></div>';
-  $statePanel.style.display = 'none';
-  $evidencePanel.innerHTML = '<div class="evidence-empty">No evidence yet</div>';
+  $body.innerHTML = '<div class="term-empty" id="term-empty"><div class="term-empty-sigil">⬡</div><div class="term-empty-head">Ready to execute</div><div class="term-empty-sub">Load a contract below and press <kbd>⌘↵</kbd> to run</div></div>';
+  $gutter.innerHTML = '';
+  lineIndex = 0;
   eventCount = 0;
-  $metricEvts.textContent = '0';
-  $metricPlan.textContent = '0';
-  $metricObs.textContent  = '0';
-  $metricEv.textContent   = '0';
-  resetPhases();
+  $mEvents.textContent = '0';
+  $mPlan.textContent = '0';
+  $mObs.textContent = '0';
+  $mEv.textContent = '0';
+  $metrics.style.display = 'none';
+  $evSection.style.display = 'none';
+  resetPhase();
 }
 
-function appendEventRow(type, body) {
-  const el = document.createElement('div');
-  el.className = 'stream-event';
+function logRow(label, badgeClass, body) {
+  lineIndex++;
+  const ts = now();
 
-  const ts = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  el.innerHTML = `
-    <span class="event-ts">${ts}</span>
-    <span class="event-type-badge badge-${type}">${type}</span>
-    <span class="event-body">${escHtml(body)}</span>
+  const row = document.createElement('div');
+  row.className = 'log-row';
+  row.innerHTML = `
+    <span class="log-ts">${ts}</span>
+    <span class="log-badge ${badgeClass}">${escHtml(label)}</span>
+    <span class="log-body">${escHtml(body)}</span>
   `;
-  $log.appendChild(el);
-  scrollLog();
+  $body.appendChild(row);
+  addGutterLine(lineIndex);
+  scroll();
 }
 
-function appendChunkLine(text) {
-  // Trim trailing newline for display, keep internal newlines
-  const display = text.replace(/\n$/, '');
-  if (!display) return;
-  const lines = display.split('\n');
-  for (const line of lines) {
-    if (!line) continue;
-    const el = document.createElement('div');
-    el.className = 'stream-event chunk-line';
-    el.innerHTML = `
-      <span class="event-ts">${new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-      <span class="event-type-badge badge-TEXT_MESSAGE_CHUNK">CHUNK</span>
-      <span class="event-body chunk-text">${escHtml(line)}</span>
-    `;
-    $log.appendChild(el);
-  }
-  scrollLog();
-}
+function logChunk(text, bodyClass = '') {
+  lineIndex++;
+  const ts = now();
 
-function appendError(msg) {
-  const el = document.createElement('div');
-  el.className = 'stream-event';
-  el.style.borderLeft = '2px solid var(--accent-red)';
-  el.style.marginLeft = '4px';
-  el.innerHTML = `
-    <span class="event-ts">${new Date().toLocaleTimeString('en-US', { hour12: false })}</span>
-    <span class="event-type-badge badge-RUN_ERROR">RUN_ERROR</span>
-    <span class="event-body" style="color:var(--accent-red);white-space:pre-wrap">${escHtml(msg)}</span>
+  const row = document.createElement('div');
+  row.className = 'log-row chunk-row';
+  row.innerHTML = `
+    <span class="log-ts">${ts}</span>
+    <span class="log-badge b-CHUNK"></span>
+    <span class="log-body${bodyClass ? ' ' + bodyClass : ''}">${escHtml(text)}</span>
   `;
-  $log.appendChild(el);
-  scrollLog();
+  $body.appendChild(row);
+  addGutterLine(lineIndex);
+  scroll();
 }
 
-function scrollLog() {
-  $log.scrollTop = $log.scrollHeight;
+function logError(msg) {
+  lineIndex++;
+  const row = document.createElement('div');
+  row.className = 'log-row';
+  row.style.borderLeft = '2px solid var(--red)';
+  row.style.paddingLeft = '8px';
+  row.innerHTML = `
+    <span class="log-ts">${now()}</span>
+    <span class="log-badge b-RUN_ERROR">ERROR</span>
+    <span class="log-body err" style="white-space:pre-wrap">${escHtml(msg)}</span>
+  `;
+  $body.appendChild(row);
+  addGutterLine(lineIndex);
+  scroll();
+}
+
+function addGutterLine(n) {
+  const el = document.createElement('div');
+  el.className = 'gutter-line';
+  el.textContent = n;
+  $gutter.appendChild(el);
+}
+
+function scroll() {
+  $body.scrollTop = $body.scrollHeight;
+}
+
+function now() {
+  return new Date().toLocaleTimeString('en-US', {
+    hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
 }
 
 function escHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/>/g, '&gt;');
 }
 
-// ── Phase tracker ─────────────────────────────────
-// Progression steps (in order). Terminal states are separate.
-const PHASE_STEPS    = ['idle', 'compiling', 'planning', 'executing', 'complete'];
+function bump(el, val) {
+  el.textContent = val;
+  el.classList.add('bump');
+  setTimeout(() => el.classList.remove('bump'), 300);
+}
+
+// ── Inspector sync ────────────────────────────────────
+function syncInspector(s) {
+  if (s.contractId) $valId.textContent = s.contractId;
+
+  if (s.goals?.length) {
+    $valGoal.textContent = s.goals[0].expression;
+  }
+
+  if (s.limits?.length) {
+    $limitList.innerHTML = s.limits.map(l => {
+      const isAllow = l.pattern?.startsWith('allow');
+      const verb = isAllow ? 'allow' : 'deny';
+      const rest = (l.pattern || l.id).replace(/^(allow|deny)\s*/, '');
+      return `<div class="limit-row ${isAllow ? 'allow' : 'deny'}">
+        <span class="limit-verb">${verb}</span>${escHtml(rest)}
+      </div>`;
+    }).join('');
+  }
+
+  if (s.utilities?.length) {
+    $utilList.innerHTML = s.utilities.map(u => `
+      <div class="utility-row${s.phase === 'executing' ? ' active' : s.phase === 'complete' || s.phase === 'warning' ? ' done' : ''}" id="u-${u.id}">
+        <span class="u-status-dot"></span>
+        <span class="u-id">${escHtml(u.id)}</span>
+      </div>
+    `).join('');
+  }
+}
+
+// ── Evidence ──────────────────────────────────────────
+function renderEvidence(items) {
+  if (!items.length) return;
+  $evSection.style.display = 'block';
+  $evList.innerHTML = items.map(ev => `
+    <div class="ev-row ${ev.passed ? 'pass' : 'fail'}">
+      <span class="ev-glyph">${ev.passed ? '✅' : '❌'}</span>
+      <div class="ev-content">
+        <span class="ev-req">${escHtml(ev.requirementId)}</span>
+        <span class="ev-assert">${escHtml(ev.assertion)}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Phase strip ───────────────────────────────────────
+const PHASE_PROG     = ['compiling', 'planning', 'executing', 'complete'];
 const PHASE_TERMINAL = new Set(['complete', 'warning', 'error']);
 
 function setPhase(phase) {
-  const steps = document.querySelectorAll('.phase-step');
+  const progIdx    = PHASE_PROG.indexOf(phase);
   const isTerminal = PHASE_TERMINAL.has(phase);
-  const progIdx = PHASE_STEPS.indexOf(phase); // -1 for warning/error
 
-  steps.forEach(el => {
-    const p = el.dataset.phase;
-    el.classList.remove('active', 'done', 'warning', 'error');
+  $pips.forEach(pip => {
+    const p = pip.dataset.phase;
+    pip.classList.remove('active', 'done', 'warning', 'error');
 
     if (p === phase) {
-      // The matching step: mark with the right class
-      el.classList.add(isTerminal && phase !== 'complete' ? phase : 'active');
-    } else if (PHASE_STEPS.includes(p)) {
-      // A progression step: mark done if it came before the current phase
-      const pIdx = PHASE_STEPS.indexOf(p);
-      const cutoff = isTerminal ? PHASE_STEPS.length : progIdx;
-      if (pIdx < cutoff) el.classList.add('done');
+      pip.classList.add(isTerminal && phase !== 'complete' ? phase : 'active');
+    } else if (PHASE_PROG.includes(p)) {
+      const pIdx = PHASE_PROG.indexOf(p);
+      const cutoff = isTerminal ? PHASE_PROG.length : progIdx;
+      if (pIdx < cutoff) pip.classList.add('done');
     }
   });
-
-  $phaseBadge.textContent = phase;
-  $phaseBadge.className = `state-phase-badge phase-${phase}`;
 }
 
-function resetPhases() {
-  document.querySelectorAll('.phase-step').forEach(el =>
-    el.classList.remove('active', 'done', 'warning', 'error')
-  );
-  $phaseBadge.textContent = '—';
-  $phaseBadge.className = 'state-phase-badge';
-}
-
-// ── Sidebar state sync ────────────────────────────
-function updateSidebarFromState(state) {
-  // Goals
-  if (state.goals?.length) {
-    document.getElementById('goal-text').textContent = state.goals[0].expression;
-    document.getElementById('block-goal').classList.add('active-goal');
-  }
-
-  // Limits
-  if (state.limits?.length) {
-    const el = document.getElementById('limits-list');
-    el.innerHTML = state.limits.map(l => {
-      const isAllow = l.pattern?.startsWith('allow');
-      return `<div class="limit-item${isAllow ? ' allow' : ''}">${escHtml(l.pattern || l.id)}</div>`;
-    }).join('');
-    document.getElementById('block-limits').classList.add('active-limit');
-  }
-
-  // Utilities
-  if (state.utilities?.length) {
-    const el = document.getElementById('utilities-list');
-    el.innerHTML = state.utilities.map(u => `
-      <div class="utility-pill${state.phase === 'executing' ? ' active' : ''}" id="util-${u.id}">
-        <span class="util-dot"></span>
-        ${escHtml(u.id)}
-      </div>
-    `).join('');
-    document.getElementById('block-utilities').classList.add('active-util');
-  }
-}
-
-// ── Evidence ──────────────────────────────────────
-function renderEvidence(evidence) {
-  if (!evidence.length) return;
-  $evidencePanel.innerHTML = '';
-  evidence.forEach(ev => {
-    const el = document.createElement('div');
-    el.className = `evidence-item ${ev.passed ? 'pass' : 'fail'}`;
-    el.innerHTML = `
-      <span class="ev-badge">${ev.passed ? '✅' : '❌'}</span>
-      <div class="ev-content">
-        <span class="ev-id">${escHtml(ev.requirementId)}</span>
-        <span class="ev-assertion">${escHtml(ev.assertion)}</span>
-      </div>
-    `;
-    $evidencePanel.appendChild(el);
-  });
+function resetPhase() {
+  $pips.forEach(p => p.classList.remove('active', 'done', 'warning', 'error'));
 }
