@@ -260,12 +260,19 @@ class GluLessRuntime:
                 
                 decision = limit_evaluator.evaluate(proposed_utility)
                 
-                # In legacy mock mode, override implicit denies to allow
-                if is_legacy and decision.effect == "deny" and decision.reason.startswith("Implicitly denied"):
+                # In legacy mock mode, override default (unmatched) denies to allow.
+                # A default deny occurs when no limit rule matched the utility —
+                # the secure default blocks mutations, but legacy tests expect permissive execution.
+                # Explicit deny rules (matched by a declared limit) are never overridden here.
+                _is_default_deny = decision.effect == "deny" and (
+                    decision.reason.startswith("Implicitly denied") or      # old wording (compat)
+                    decision.reason.startswith("No limit matched")          # new wording
+                )
+                if is_legacy and _is_default_deny:
                     decision = LimitDecision(
                         effect="allow",
                         utility=proposed_utility.id,
-                        reason="Allowed by default in legacy mock mode"
+                        reason="Allowed by default in legacy mock mode (no explicit deny limit matched)",
                     )
 
                 self.limit_decisions.append(decision)
