@@ -704,6 +704,77 @@ def health():
     }
 
 
+@app.get("/utilities")
+def list_utilities():
+    """
+    List all utilities currently projected into the runtime registry.
+
+    Returns the canonical projected utility list — the full set available
+    for goal-filtering and limit-authorization before any contract runs.
+    This is a read-only introspection endpoint; it does not execute any utility.
+    """
+    if _REGISTRY is None:
+        return {"error": "registry not loaded", "detail": _REGISTRY_ERROR, "utilities": []}
+
+    utilities = []
+    for reg_id, ut_data in _REGISTRY.utilities.items():
+        utilities.append({
+            "registryId":  reg_id,
+            "utilityId":   ut_data["operation_id"],
+            "type":        ut_data["type"],
+            "sideEffects": ut_data["side_effect"]["declared"],
+            "transport": {
+                "method": ut_data["transport"]["method"],
+                "path":   ut_data["transport"]["path"],
+            },
+            "domain":      ut_data["semantic_capabilities"].get("domain", ""),
+            "sourceUri":   ut_data["source_uri"],
+        })
+    return {"count": len(utilities), "utilities": utilities}
+
+
+@app.get("/registry")
+def registry_dump():
+    """
+    Return the full runtime registry as JSON.
+
+    Introspection endpoint for debugging importer projections. Shows every
+    field stored per utility including transport, side-effect tracking,
+    auth requirements, and semantic capability metadata.
+    Not intended for production use.
+    """
+    if _REGISTRY is None:
+        return {"error": "registry not loaded", "detail": _REGISTRY_ERROR}
+    return {"count": len(_REGISTRY.utilities), "registry": _REGISTRY.utilities}
+
+
+@app.get("/connections")
+def list_connections():
+    """
+    List active transport connections (base URLs) the agent can reach.
+
+    In the POC this is a single target (the API_URL from env).
+    In a production GluLess runtime this would enumerate all registered
+    connection descriptors (one per imported API spec or MCP server).
+    """
+    connections = []
+    if _REGISTRY:
+        # Derive distinct servers from projected utilities
+        seen: set[str] = set()
+        for ut_data in _REGISTRY.utilities.values():
+            server = _API_URL
+            if server not in seen:
+                seen.add(server)
+                connections.append({
+                    "id":       "default",
+                    "type":     "http",
+                    "baseUrl":  server,
+                    "specUri":  str(_OPENAPI_PATH),
+                    "status":   "configured",
+                })
+    return {"count": len(connections), "connections": connections}
+
+
 @app.post("/agent")
 async def agent_endpoint(request: Request) -> StreamingResponse:
     body = await request.json()
