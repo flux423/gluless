@@ -3,164 +3,206 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GluLess — Agent Console</title>
-  <meta name="description" content="GluLess GLU Agent console. Goal · Limits · Utilities. AG-UI streaming protocol." />
+  <title>GluLess Runtime</title>
+  <meta name="description" content="GluLess contract runtime inspector. Goal · Limits · Utilities. The contract is the program." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-<div class="shell">
+<div class="canvas" id="canvas">
 
-  <!-- ── Top bar ── -->
-  <header class="topbar">
-    <div class="topbar-left">
+  <!-- ═══ HEADER ═══════════════════════════════════════════════════════ -->
+  <header class="glu-header">
+    <div class="header-brand">
       <div class="wordmark">
-        <span class="wordmark-glu">GLU</span>
-        <span class="wordmark-less">less</span>
+        <span class="wm-glu">GLU</span><span class="wm-less">less</span>
       </div>
-      <div class="topbar-sep"></div>
-      <span class="topbar-label">Agent Console</span>
+      <div class="tagline">The contract is the program.</div>
     </div>
 
-    <div class="phase-strip" id="phase-strip">
-      <div class="phase-pip" data-phase="compiling">
-        <span class="pip-dot"></span><span>Compile</span>
+    <div class="header-actions">
+      <div class="runtime-status" id="runtime-status">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-label">Connecting…</span>
       </div>
-      <div class="phase-connector"></div>
-      <div class="phase-pip" data-phase="planning">
-        <span class="pip-dot"></span><span>Plan</span>
-      </div>
-      <div class="phase-connector"></div>
-      <div class="phase-pip" data-phase="executing">
-        <span class="pip-dot"></span><span>Execute</span>
-      </div>
-      <div class="phase-connector"></div>
-      <div class="phase-pip" data-phase="complete">
-        <span class="pip-dot"></span><span>Done</span>
-      </div>
-    </div>
-
-    <div class="topbar-right">
-      <div class="agent-pill" id="agent-pill">
-        <span class="pill-dot offline"></span>
-        <span id="agent-pill-label">Offline</span>
-      </div>
+      <button class="btn-secondary" id="btn-view-contract">View contract</button>
+      <button class="btn-primary" id="btn-run">
+        <span id="run-icon">▶</span>
+        <span id="run-label">Run contract</span>
+      </button>
     </div>
   </header>
 
-  <!-- ── Body ── -->
-  <div class="body">
+  <!-- ═══ CONTRACT DRAWER (hidden by default) ═══════════════════════ -->
+  <div class="drawer contract-drawer" id="contract-drawer" hidden>
+    <div class="drawer-header">
+      <span class="drawer-title">CONTRACT YAML</span>
+      <button class="drawer-close" id="btn-close-contract" aria-label="Close">✕</button>
+    </div>
+    <pre class="contract-pre" id="contract-pre"></pre>
+  </div>
 
-    <!-- Left: contract inspector -->
-    <aside class="inspector">
-      <div class="inspector-section">
-        <div class="inspector-heading">Contract</div>
-        <div class="inspector-card" id="card-id">
-          <div class="card-label">ID</div>
-          <div class="card-value mono" id="val-id">—</div>
+  <!-- ═══ ZONE: GOAL ═══════════════════════════════════════════════════ -->
+  <section class="zone zone-goal" id="zone-goal">
+    <div class="zone-eyebrow">GOAL</div>
+    <div class="goal-body">
+      <div class="goal-text">
+        <div class="goal-description" id="goal-description">
+          Retrieve all registered cities from GasCity
         </div>
-        <div class="inspector-card goal" id="card-goal">
-          <div class="card-label">
-            <span class="card-icon">◎</span> Goal
-          </div>
-          <div class="card-value mono" id="val-goal">cities.listed == true</div>
+        <div class="goal-predicate" id="goal-predicate">cities.listed == true</div>
+      </div>
+      <div class="goal-verdict" id="goal-verdict">
+        <span class="verdict-badge unsatisfied" id="verdict-badge">UNSATISFIED</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ ZONE: LIMITS + UTILITIES ════════════════════════════════════ -->
+  <div class="zone-pair">
+
+    <section class="zone zone-limits">
+      <div class="zone-eyebrow">LIMITS</div>
+      <div id="limits-list" class="limits-list">
+        <!-- populated from state.limits -->
+        <div class="limit-row deny">
+          <span class="limit-verb">deny</span>
+          <span class="limit-pattern">*</span>
+          <span class="limit-annotation">all actions denied by default</span>
+        </div>
+        <div class="limit-row allow">
+          <span class="limit-verb">allow</span>
+          <span class="limit-pattern">GasCity.cities.list</span>
+          <span class="limit-annotation">read-only · no side effects</span>
         </div>
       </div>
+    </section>
 
-      <div class="inspector-section">
-        <div class="inspector-heading">Limits</div>
-        <div id="limits-list" class="limits-list">
-          <div class="limit-row deny"><span class="limit-verb">deny</span> *</div>
-          <div class="limit-row allow"><span class="limit-verb">allow</span> GasCity.cities.list</div>
+    <section class="zone zone-utilities">
+      <div class="zone-eyebrow">UTILITIES</div>
+      <div class="utilities-body">
+        <div class="context-funnel" id="context-funnel">
+          <div class="funnel-row">
+            <span class="funnel-label">Registry</span>
+            <span class="funnel-count" id="f-registry">—</span>
+          </div>
+          <div class="funnel-arrow">↓</div>
+          <div class="funnel-row">
+            <span class="funnel-label">Goal-compatible</span>
+            <span class="funnel-count" id="f-compatible">—</span>
+          </div>
+          <div class="funnel-arrow">↓</div>
+          <div class="funnel-row funnel-selected">
+            <span class="funnel-label">Limit-permitted</span>
+            <span class="funnel-count selected" id="f-permitted">—</span>
+          </div>
         </div>
-      </div>
-
-      <div class="inspector-section">
-        <div class="inspector-heading">Utilities</div>
-        <div id="utilities-list" class="utilities-list">
-          <div class="utility-row" id="u-GasCity.cities.list">
-            <span class="u-status-dot"></span>
-            <span class="u-id">GasCity.cities.list</span>
+        <div id="utility-cards" class="utility-cards">
+          <!-- populated from state.utilities -->
+          <div class="utility-card" id="uc-default">
+            <div class="uc-name">GasCity.cities.list</div>
+            <div class="uc-meta-row">
+              <span class="uc-badge read">READ</span>
+              <span class="uc-meta">no side effects</span>
+            </div>
+            <div class="uc-binding">OpenAPI · GET /v0/cities</div>
           </div>
         </div>
       </div>
+    </section>
 
-      <div class="inspector-section" id="evidence-section" style="display:none">
-        <div class="inspector-heading">Evidence</div>
-        <div id="evidence-list" class="evidence-list"></div>
+  </div>
+
+  <!-- ═══ ZONE: RUNTIME PIPELINE ══════════════════════════════════════ -->
+  <section class="zone zone-pipeline" id="zone-pipeline">
+    <div class="zone-eyebrow">RUNTIME</div>
+    <div class="pipeline">
+
+      <div class="p-stage" data-stage="resolve" id="ps-resolve">
+        <div class="ps-count" id="psc-resolve">—</div>
+        <div class="ps-name">RESOLVE</div>
+        <div class="ps-sub">registry</div>
       </div>
 
-      <div class="inspector-metrics" id="metrics-block" style="display:none">
-        <div class="metric-row">
-          <span class="metric-k">Plan</span>
-          <span class="metric-v" id="m-plan">0</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-k">Observations</span>
-          <span class="metric-v" id="m-obs">0</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-k">Evidence</span>
-          <span class="metric-v" id="m-ev">0</span>
-        </div>
-        <div class="metric-row">
-          <span class="metric-k">Events</span>
-          <span class="metric-v" id="m-events">0</span>
-        </div>
-      </div>
-    </aside>
+      <div class="p-arrow">→</div>
 
-    <!-- Right: terminal + composer -->
-    <div class="workspace">
-
-      <!-- Stream terminal -->
-      <div class="terminal" id="terminal">
-        <div class="terminal-gutter" id="terminal-gutter"></div>
-        <div class="terminal-body" id="terminal-body">
-          <div class="term-empty" id="term-empty">
-            <div class="term-empty-sigil">⬡</div>
-            <div class="term-empty-head">Ready to execute</div>
-            <div class="term-empty-sub">Load a contract below and press <kbd>⌘↵</kbd> to run</div>
-          </div>
-        </div>
+      <div class="p-stage" data-stage="filter" id="ps-filter">
+        <div class="ps-count" id="psc-filter">—</div>
+        <div class="ps-name">FILTER</div>
+        <div class="ps-sub">goal-compatible</div>
       </div>
 
-      <!-- Composer -->
-      <div class="composer">
-        <div class="composer-editor">
-          <div class="composer-tabs">
-            <button class="ctab active" data-mode="contract" id="ctab-contract">YAML</button>
-            <button class="ctab" data-mode="natural" id="ctab-natural">Natural</button>
-            <span class="composer-endpoint" id="composer-endpoint">↗ localhost:8080</span>
-          </div>
-          <textarea
-            id="contract-input"
-            class="composer-textarea"
-            rows="5"
-            placeholder="Paste a GLU contract YAML…"
-            spellcheck="false"
-          ></textarea>
-        </div>
-        <div class="composer-actions">
-          <div class="action-left">
-            <button class="action-btn ghost" id="btn-load-demo">Load demo</button>
-            <button class="action-btn ghost" id="btn-clear">Clear log</button>
-          </div>
-          <div class="action-right">
-            <button class="action-btn primary" id="btn-run" disabled>
-              <span id="run-icon">▶</span>
-              <span id="run-label">Run</span>
-            </button>
-          </div>
-        </div>
+      <div class="p-arrow">→</div>
+
+      <div class="p-stage" data-stage="authorize" id="ps-authorize">
+        <div class="ps-count" id="psc-authorize">—</div>
+        <div class="ps-name">AUTHORIZE</div>
+        <div class="ps-sub">permitted</div>
+      </div>
+
+      <div class="p-arrow">→</div>
+
+      <div class="p-stage" data-stage="execute" id="ps-execute">
+        <div class="ps-count" id="psc-execute">—</div>
+        <div class="ps-name">EXECUTE</div>
+        <div class="ps-sub">invocations</div>
+      </div>
+
+      <div class="p-arrow">→</div>
+
+      <div class="p-stage" data-stage="verify" id="ps-verify">
+        <div class="ps-count" id="psc-verify">—</div>
+        <div class="ps-name">VERIFY</div>
+        <div class="ps-sub">evidence</div>
       </div>
 
     </div>
+  </section>
+
+  <!-- ═══ ZONE: DECISION + EVIDENCE ═══════════════════════════════════ -->
+  <div class="zone-pair zone-pair-bottom" id="zone-pair-bottom">
+
+    <section class="zone zone-decision">
+      <div class="zone-eyebrow">DECISION</div>
+      <div id="decision-paths" class="decision-paths">
+        <div class="decision-empty">Awaiting authorization evaluation…</div>
+      </div>
+    </section>
+
+    <section class="zone zone-evidence">
+      <div class="zone-eyebrow">EVIDENCE</div>
+      <div id="evidence-entries" class="evidence-entries">
+        <div class="evidence-empty">Awaiting verification…</div>
+      </div>
+    </section>
+
   </div>
-</div>
+
+  <!-- ═══ RESULT BLOCK (revealed on proven / unresolved) ══════════════ -->
+  <section class="zone zone-result" id="zone-result" hidden>
+    <div class="result-inner" id="result-inner">
+      <div class="result-label" id="result-label">GOAL SATISFIED</div>
+      <div class="result-predicate" id="result-predicate">cities.listed == true</div>
+      <div class="result-verdict" id="result-verdict">PROVEN</div>
+    </div>
+  </section>
+
+  <!-- ═══ EVENTS DRAWER (collapsible, secondary) ═══════════════════════ -->
+  <div class="events-drawer" id="events-drawer">
+    <button class="events-toggle" id="events-toggle" aria-expanded="false">
+      <span class="toggle-caret" id="toggle-caret">▸</span>
+      Runtime events
+      <span class="events-badge" id="events-badge">0</span>
+    </button>
+    <div class="events-body" id="events-body" hidden>
+      <div class="events-log" id="events-log"></div>
+    </div>
+  </div>
+
+</div><!-- /.canvas -->
 
 <script src="app.js"></script>
 </body>

@@ -3,15 +3,22 @@ GLU Agent — AG-UI streaming endpoint
 Goal · Limits · Utilities
 
 Implements the AG-UI protocol (SSE) over FastAPI.
-The agent accepts a GLU contract YAML or natural language,
-compiles it, plans against declared utilities, and streams
-AG-UI events back to the client.
+
+Five-stage runtime pipeline:
+  RESOLVE → FILTER → AUTHORIZE → EXECUTE → VERIFY
+
+State includes:
+  context_projection  — registry funnel counts
+  decision_paths      — per-utility authorization decisions
+  observations        — raw HTTP results
+  evidence            — evaluated evidence requirements
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import time
 import uuid
@@ -24,14 +31,21 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-# Add the Python SDK to the path
+# ---------------------------------------------------------------------------
+# SDK path
+# ---------------------------------------------------------------------------
+
 SDK_PATH = Path(__file__).resolve().parents[4] / "sdk" / "python"
 sys.path.insert(0, str(SDK_PATH))
 
 from gluless.compiler import GluLessCompiler, CompileError
 from gluless.models import Contract, Utility, UtilityType, UtilityTransport, SideEffectType
 
-app = FastAPI(title="GLU Agent", version="0.1.0")
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
+
+app = FastAPI(title="GLU Agent", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,19 +93,67 @@ KNOWN_UTILITIES: list[Utility] = [
 
 UTILITY_MAP = {u.id: u for u in KNOWN_UTILITIES}
 
-# GasCity base URL (override via env)
-import os
-GASCITY_BASE = os.getenv("GASCITY_BASE_URL", "http://localhost:8000/v0")
+GASCITY_BASE  = os.getenv("GASCITY_BASE_URL", "http://localhost:8000/v0")
 GASCITY_TOKEN = os.getenv("GASCITY_TOKEN", "")
+
+# ---------------------------------------------------------------------------
+# Default GLU contract
+# ---------------------------------------------------------------------------
+
+DEFAULT_CONTRACT_YAML = """
+id: glu-demo-contract
+goals:
+  - id: goal-list-cities
+    expression: "cities.listed == true"
+    description: "Retrieve all registered cities from GasCity"
+limits:
+  - id: limit-deny-all
+    action_pattern: "deny *"
+    description: "Deny any action not explicitly permitted"
+  - id: limit-allow-list
+    action_pattern: "allow GasCity.cities.list"
+    description: "Permit listing cities — read-only, no side effects"
+utilities:
+  - GasCity.cities.list
+evidence_requirements:
+  - id: ev-http-ok
+    assertion: "response.status == 200"
+    description: "GasCity responded with HTTP 200"
+""".strip()
+
+# ---------------------------------------------------------------------------
+# Serialisation helpers
+# ---------------------------------------------------------------------------
+
+def _enum_str(v) -> str:
+    """Serialize an enum value to a clean lowercase string."""
+    s = str(v)
+    return s.split(".")[-1].lower().replace("_", "-") if "." in s else s.lower()
+
+
+def _utility_meta(u: Utility) -> dict:
+    """Return a JSON-serialisable representation of a Utility."""
+    return {
+        "id": u.id,
+        "name": u.name,
+        "namespace": u.namespace,
+        "description": u.description,
+        "type": _enum_str(u.type),
+        "sideEffects": _enum_str(u.side_effects),
+        "transport": {
+            "method": u.transport.method,
+            "path": u.transport.path,
+        },
+    }
+
 
 # ---------------------------------------------------------------------------
 # AG-UI event helpers
 # ---------------------------------------------------------------------------
 
 def _event(event_type: str, data: dict) -> str:
-    """Format a single SSE event."""
-    payload = json.dumps({"type": event_type, **data})
-    return f"data: {payload}\n\n"
+    """Format a single SSE event frame."""
+    return f"data: {json.dumps({'type': event_type, **data})}\n\n"
 
 
 def _ts() -> int:
@@ -99,63 +161,86 @@ def _ts() -> int:
 
 
 # ---------------------------------------------------------------------------
-# Default GLU contract (used when user sends plain text, not YAML)
+# Limit evaluation
 # ---------------------------------------------------------------------------
 
-DEFAULT_CONTRACT_YAML = """
-id: glu-demo-contract
-goals:
-  - id: goal-1
-    expression: "cities.listed == true"
-    description: "Retrieve all registered cities from GasCity"
-limits:
-  - id: limit-deny-all
-    action_pattern: "deny *"
-    description: "Deny any action not declared in utilities"
-  - id: limit-allow-list
-    action_pattern: "allow GasCity.cities.list"
-    description: "Allow reading the city list"
-utilities:
-  - GasCity.cities.list
-evidence_requirements:
-  - id: ev-cities
-    assertion: "response.status == 200"
-    description: "GasCity responded with HTTP 200"
-"""
+def _evaluate_limits(
+    utility_id: str,
+    contract: Contract,
+) -> tuple[bool, str, str | None]:
+    """
+    Return (is_allowed, reason_phrase, limit_id).
+
+    Evaluation order:
+      1. For each limit in declaration order:
+         - "allow <id>" → immediately permitted
+         - "deny <id>"  → immediately denied
+         - "deny *"     → denied (no matching allow found)
+      2. If no limit matches → denied (no allow)
+    """
+    allow_limits = [
+        l for l in contract.limits
+        if l.action_pattern.startswith("allow ")
+    ]
+    deny_limits = [
+        l for l in contract.limits
+        if l.action_pattern.startswith("deny ")
+    ]
+
+    # Check explicit allow
+    for lim in allow_limits:
+        pattern = lim.action_pattern.replace("allow ", "").strip()
+        if pattern == utility_id or pattern == "*":
+            return True, lim.action_pattern, lim.id
+
+    # Check explicit deny (catches "deny *" and "deny <id>")
+    for lim in deny_limits:
+        pattern = lim.action_pattern.replace("deny ", "").strip()
+        if pattern == "*" or pattern == utility_id:
+            return False, lim.action_pattern, lim.id
+
+    return False, "no matching allow", None
 
 
 # ---------------------------------------------------------------------------
 # Core streaming generator
 # ---------------------------------------------------------------------------
 
-async def _chunk(msg_id: str, text: str) -> str:
-    """Build a TEXT_MESSAGE_CHUNK event string."""
-    return _event("TEXT_MESSAGE_CHUNK", {"messageId": msg_id, "delta": text})
-
-
 async def run_glu_agent(
     thread_id: str,
     run_id: str,
     user_message: str,
 ) -> AsyncGenerator[str, None]:
+    """
+    Five-stage GLU runtime, fully streamed via AG-UI SSE.
 
-    async def emit(event_str: str):
-        """Yield + flush — lets the event loop push the SSE frame before continuing."""
-        return event_str  # caller must yield then sleep
+    Phases emitted to state:
+      resolving  → filtering → authorizing → executing → verifying
+      → proven | unresolved
+    """
 
-    # 1. RUN_STARTED
+    async def flush():
+        await asyncio.sleep(0)
+
+    async def delay(ms: float = 0.05):
+        await asyncio.sleep(ms)
+
+    # ── 1. RUN_STARTED ──────────────────────────────────────────────────────
     yield _event("RUN_STARTED", {"threadId": thread_id, "runId": run_id})
-    await asyncio.sleep(0)
+    await flush()
 
-    # 2. Open narrative message
+    # ── 2. Narrative message stream ──────────────────────────────────────────
     msg_id = str(uuid.uuid4())
     yield _event("TEXT_MESSAGE_START", {"messageId": msg_id, "role": "assistant"})
-    await asyncio.sleep(0)
+    await flush()
 
-    yield await _chunk(msg_id, "⚙️  Compiling GLU contract…\n")
-    await asyncio.sleep(0.05)
+    def chunk(text: str) -> str:
+        return _event("TEXT_MESSAGE_CHUNK", {"messageId": msg_id, "delta": text})
 
-    # Try to parse as YAML contract; fall back to default
+    # ── 3. Compile ───────────────────────────────────────────────────────────
+    yield chunk("⚙️  Compiling GLU contract…\n")
+    await delay(0.05)
+
     contract_yaml = user_message.strip()
     if not contract_yaml.startswith("id:"):
         contract_yaml = DEFAULT_CONTRACT_YAML
@@ -165,40 +250,106 @@ async def run_glu_agent(
             contract_yaml, available_utilities=KNOWN_UTILITIES
         )
     except CompileError as e:
-        yield await _chunk(msg_id, f"❌ Compile error: {e}\n")
-        await asyncio.sleep(0)
+        yield chunk(f"❌ Compile error: {e}\n")
+        await flush()
         yield _event("TEXT_MESSAGE_END", {"messageId": msg_id})
-        await asyncio.sleep(0)
         yield _event("RUN_ERROR", {"message": str(e), "code": "COMPILE_ERROR"})
         return
 
-    yield await _chunk(msg_id, f"✅ Contract `{contract.id}` compiled\n")
-    await asyncio.sleep(0.05)
-    yield await _chunk(msg_id, f"   Goals: {len(contract.goals)}  Limits: {len(contract.limits)}  Utilities: {len(contract.utilities)}\n")
-    await asyncio.sleep(0.05)
+    yield chunk(f"✅ Contract `{contract.id}` compiled\n")
+    await delay(0.05)
 
-    # 3. Broadcast initial state
-    state = {
+    # ── 4. RESOLVE stage ─────────────────────────────────────────────────────
+    # Report all utilities available in the registry.
+    registry_total = len(KNOWN_UTILITIES)
+
+    yield chunk(f"🔍 Resolving utilities from registry ({registry_total} registered)…\n")
+    await delay(0.08)
+
+    state: dict = {
         "contractId": contract.id,
-        "phase": "planning",
-        "goals": [{"id": g.id, "expression": g.expression} for g in contract.goals],
-        "limits": [{"id": l.id, "pattern": l.action_pattern} for l in contract.limits],
-        "utilities": [{"id": u.id, "name": u.name} for u in contract.utilities],
+        "phase": "resolving",
+        "goals": [
+            {"id": g.id, "expression": g.expression, "description": getattr(g, "description", "")}
+            for g in contract.goals
+        ],
+        "limits": [
+            {"id": l.id, "pattern": l.action_pattern, "description": getattr(l, "description", "")}
+            for l in contract.limits
+        ],
+        "utilities": [_utility_meta(u) for u in contract.utilities],
+        "context_projection": {
+            "registry_total": registry_total,
+            "goal_compatible": None,
+            "limit_permitted": None,
+        },
+        "decision_paths": [],
         "plan": [],
         "observations": [],
         "evidence": [],
         "error": None,
     }
     yield _event("STATE_SNAPSHOT", {"snapshot": state})
-    await asyncio.sleep(0)
+    await flush()
 
-    # 4. Plan
-    yield await _chunk(msg_id, "\n🧠 Planning execution against declared utilities and limits…\n")
-    await asyncio.sleep(0.05)
+    # ── 5. FILTER stage ──────────────────────────────────────────────────────
+    # Narrow to utilities that satisfy the goal (declared in contract).
+    declared_ids = {u.id for u in contract.utilities}
+    goal_compatible = [u for u in KNOWN_UTILITIES if u.id in declared_ids]
+    goal_compatible_count = len(goal_compatible)
 
-    plan = []
-    for util in contract.utilities:
-        plan.append({"step": len(plan) + 1, "utilityId": util.id, "status": "pending"})
+    yield chunk(f"🎯 Goal-compatible: {goal_compatible_count} of {registry_total}\n")
+    await delay(0.08)
+
+    state["phase"] = "filtering"
+    state["context_projection"]["goal_compatible"] = goal_compatible_count
+    yield _event("STATE_DELTA", {"delta": [
+        {"op": "replace", "path": "/phase", "value": "filtering"},
+        {"op": "replace", "path": "/context_projection/goal_compatible", "value": goal_compatible_count},
+    ]})
+    await flush()
+
+    # ── 6. AUTHORIZE stage ───────────────────────────────────────────────────
+    # Evaluate each goal-compatible utility against declared limits.
+    yield chunk("⚖️  Evaluating limits against candidates…\n")
+    await delay(0.08)
+
+    decision_paths = []
+    permitted_count = 0
+
+    for u in goal_compatible:
+        is_allowed, reason, limit_id = _evaluate_limits(u.id, contract)
+        if is_allowed:
+            permitted_count += 1
+        decision_paths.append({
+            "utilityId": u.id,
+            "name": u.name,
+            "type": _enum_str(u.type),
+            "sideEffects": _enum_str(u.side_effects),
+            "decision": "authorized" if is_allowed else "denied",
+            "reason": reason,
+            "limitId": limit_id,
+        })
+        mark = "✅" if is_allowed else "⛔"
+        yield chunk(f"   {mark} {u.id}: {reason}\n")
+        await delay(0.05)
+
+    state["phase"] = "authorizing"
+    state["context_projection"]["limit_permitted"] = permitted_count
+    state["decision_paths"] = decision_paths
+    yield _event("STATE_DELTA", {"delta": [
+        {"op": "replace", "path": "/phase", "value": "authorizing"},
+        {"op": "replace", "path": "/context_projection/limit_permitted", "value": permitted_count},
+        {"op": "replace", "path": "/decision_paths", "value": decision_paths},
+    ]})
+    await flush()
+
+    # ── 7. EXECUTE stage ─────────────────────────────────────────────────────
+    plan = [
+        {"step": i + 1, "utilityId": d["utilityId"], "status": "pending"}
+        for i, d in enumerate(decision_paths)
+        if d["decision"] == "authorized"
+    ]
 
     state["phase"] = "executing"
     state["plan"] = plan
@@ -206,12 +357,14 @@ async def run_glu_agent(
         {"op": "replace", "path": "/phase", "value": "executing"},
         {"op": "replace", "path": "/plan", "value": plan},
     ]})
-    await asyncio.sleep(0)
+    await flush()
 
-    # 5. Execute each utility
     observations = []
-    evidence = []
-    all_passed = True
+    all_executed = len(plan) > 0
+
+    headers = {}
+    if GASCITY_TOKEN:
+        headers["X-GasCity-Token"] = GASCITY_TOKEN
 
     async with httpx.AsyncClient(base_url=GASCITY_BASE, timeout=10.0) as client:
         for step in plan:
@@ -220,26 +373,8 @@ async def run_glu_agent(
             if not util:
                 continue
 
-            yield await _chunk(msg_id, f"\n▶️  Executing utility `{util_id}`\u2026\n")
-            await asyncio.sleep(0.08)
-
-            # Enforce limits — only "allow" patterns pass
-            allowed_ids = {
-                l.action_pattern.replace("allow ", "").strip()
-                for l in contract.limits
-                if l.action_pattern.startswith("allow ")
-            }
-            if util_id not in allowed_ids:
-                yield await _chunk(msg_id, f"⛔ Limit denied `{util_id}` — not in allow-list\n")
-                await asyncio.sleep(0.05)
-                step["status"] = "denied"
-                all_passed = False
-                continue
-
-            # Execute
-            headers = {}
-            if GASCITY_TOKEN:
-                headers["X-GasCity-Token"] = GASCITY_TOKEN
+            yield chunk(f"▶  Executing {util_id} ({util.transport.method} {util.transport.path})…\n")
+            await delay(0.08)
 
             try:
                 if util.transport.method == "GET":
@@ -251,88 +386,104 @@ async def run_glu_agent(
                     "utilityId": util_id,
                     "status": resp.status_code,
                     "body": resp.text[:500],
+                    "timestamp": _ts(),
                 }
                 observations.append(obs)
                 step["status"] = "complete"
 
-                yield await _chunk(msg_id, f"   ↩  HTTP {resp.status_code} from `{util.transport.path}`\n")
-                await asyncio.sleep(0.05)
-
-                # Evaluate evidence requirements
-                for ev_req in contract.evidence_requirements:
-                    passed = resp.status_code == 200
-                    ev = {
-                        "requirementId": ev_req.id,
-                        "assertion": ev_req.assertion,
-                        "passed": passed,
-                        "observation": obs,
-                    }
-                    evidence.append(ev)
-                    mark = "✅" if passed else "❌"
-                    yield await _chunk(msg_id, f"   {mark} Evidence `{ev_req.id}`: {ev_req.assertion} \u2192 {'PASS' if passed else 'FAIL'}\n")
-                    await asyncio.sleep(0.05)
-                    if not passed:
-                        all_passed = False
+                yield chunk(f"   ↩  HTTP {resp.status_code}\n")
+                await delay(0.05)
 
             except httpx.ConnectError:
-                step["status"] = "error"
-                all_passed = False
-                obs = {"utilityId": util_id, "status": 0, "body": "Connection refused — GasCity not running"}
+                obs = {
+                    "utilityId": util_id,
+                    "status": 0,
+                    "body": "Connection refused — GasCity not running",
+                    "timestamp": _ts(),
+                }
                 observations.append(obs)
-                yield await _chunk(msg_id, f"   ⚠️  GasCity unreachable — observation recorded\n")
-                await asyncio.sleep(0.05)
-                # Still record evidence (failed)
-                for ev_req in contract.evidence_requirements:
-                    evidence.append({
-                        "requirementId": ev_req.id,
-                        "assertion": ev_req.assertion,
-                        "passed": False,
-                        "observation": obs,
-                    })
-                    yield await _chunk(msg_id, f"   ❌ Evidence `{ev_req.id}`: {ev_req.assertion} → FAIL (no connection)\n")
-                    await asyncio.sleep(0.05)
+                step["status"] = "error"
 
-    # 6. Final state
-    state["phase"] = "complete" if all_passed else "error"
+                yield chunk(f"   ⚠️  GasCity unreachable — observation recorded (status 0)\n")
+                await delay(0.05)
+
+    # ── 8. VERIFY stage ──────────────────────────────────────────────────────
+    yield chunk("🔬 Verifying evidence requirements…\n")
+    await delay(0.08)
+
+    state["phase"] = "verifying"
     state["observations"] = observations
+    yield _event("STATE_DELTA", {"delta": [
+        {"op": "replace", "path": "/phase", "value": "verifying"},
+        {"op": "replace", "path": "/observations", "value": observations},
+    ]})
+    await flush()
+
+    evidence = []
+    all_passed = True
+
+    for obs in observations:
+        for ev_req in contract.evidence_requirements:
+            passed = obs["status"] == 200
+            if not passed:
+                all_passed = False
+            ev = {
+                "requirementId": ev_req.id,
+                "assertion": ev_req.assertion,
+                "description": getattr(ev_req, "description", ""),
+                "passed": passed,
+                "utilityId": obs["utilityId"],
+                "httpStatus": obs["status"],
+                "timestamp": obs.get("timestamp"),
+            }
+            evidence.append(ev)
+            mark = "✅" if passed else "❌"
+            verdict = "PASS" if passed else f"FAIL (HTTP {obs['status']})"
+            yield chunk(f"   {mark} {ev_req.id}: {ev_req.assertion} → {verdict}\n")
+            await delay(0.05)
+
+    if not observations:
+        # No utilities were authorized and executed
+        all_passed = False
+
+    # ── 9. Final state ────────────────────────────────────────────────────────
+    final_phase = "proven" if all_passed else "unresolved"
+    state["phase"] = final_phase
     state["evidence"] = evidence
     state["plan"] = plan
 
     yield _event("STATE_SNAPSHOT", {"snapshot": state})
-    await asyncio.sleep(0)
+    await flush()
 
-    # 7. Summary chunk
-    status_icon = "🎯" if all_passed else "⚠️"
-    phase_str = state["phase"]
-    yield await _chunk(msg_id, f"\n{status_icon} Phase: {phase_str}  │  Observations: {len(observations)}  │  Evidence: {len(evidence)}\n")
-    await asyncio.sleep(0.05)
+    # ── 10. Close message ─────────────────────────────────────────────────────
+    verdict_line = "🎯 PROVEN" if all_passed else "⚠️  UNRESOLVED"
+    yield chunk(f"\n{verdict_line}\n")
+    await delay(0.05)
 
     yield _event("TEXT_MESSAGE_END", {"messageId": msg_id})
-    await asyncio.sleep(0)
+    await flush()
 
     if all_passed:
-        yield _event("RUN_FINISHED", {
-            "threadId": thread_id,
-            "runId": run_id,
-        })
+        yield _event("RUN_FINISHED", {"threadId": thread_id, "runId": run_id})
     else:
         yield _event("RUN_FINISHED", {
             "threadId": thread_id,
             "runId": run_id,
-            "warning": "Some evidence requirements failed — see observations",
+            "warning": "Evidence requirements not satisfied — GasCity may be unreachable",
         })
 
 
 # ---------------------------------------------------------------------------
-# FastAPI endpoint
+# FastAPI endpoints
 # ---------------------------------------------------------------------------
 
 @app.post("/agent")
 async def agent_endpoint(request: Request) -> StreamingResponse:
     body = await request.json()
     thread_id = body.get("threadId", str(uuid.uuid4()))
-    run_id = body.get("runId", str(uuid.uuid4()))
-    messages = body.get("messages", [])
+    run_id    = body.get("runId",    str(uuid.uuid4()))
+    messages  = body.get("messages", [])
+
     user_message = ""
     for m in reversed(messages):
         if m.get("role") == "user":
@@ -358,19 +509,14 @@ async def agent_endpoint(request: Request) -> StreamingResponse:
 
 @app.get("/health")
 async def health() -> dict:
-    return {"status": "ok", "agent": "glu-agent", "version": "0.1.0"}
+    return {
+        "status": "ok",
+        "agent": "glu-agent",
+        "version": "0.2.0",
+        "registry": len(KNOWN_UTILITIES),
+    }
 
 
 @app.get("/utilities")
 async def list_utilities() -> list:
-    return [
-        {
-            "id": u.id,
-            "name": u.name,
-            "namespace": u.namespace,
-            "description": u.description,
-            "type": u.type,
-            "side_effects": u.side_effects,
-        }
-        for u in KNOWN_UTILITIES
-    ]
+    return [_utility_meta(u) for u in KNOWN_UTILITIES]
