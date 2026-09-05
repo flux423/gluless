@@ -3,206 +3,190 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GluLess Runtime</title>
-  <meta name="description" content="GluLess contract runtime inspector. Goal · Limits · Utilities. The contract is the program." />
+  <title>GluLess</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-<div class="canvas" id="canvas">
+<div class="canvas">
 
-  <!-- ═══ HEADER ═══════════════════════════════════════════════════════ -->
+  <!-- HEADER -->
   <header class="glu-header">
-    <div class="header-brand">
-      <div class="wordmark">
-        <span class="wm-glu">GLU</span><span class="wm-less">less</span>
-      </div>
+    <div>
+      <div class="wordmark"><span class="wm-glu">GLU</span><span class="wm-less">less</span></div>
       <div class="tagline">The contract is the program.</div>
     </div>
-
     <div class="header-actions">
-      <div class="runtime-status" id="runtime-status">
+      <div class="status-pill" id="status-pill">
         <span class="status-dot" id="status-dot"></span>
         <span id="status-label">Connecting…</span>
       </div>
-      <button class="btn-secondary" id="btn-view-contract">View contract</button>
-      <button class="btn-primary" id="btn-run">
+      <button class="btn-ghost" id="btn-contract">Contract</button>
+      <button class="btn" id="btn-run">
         <span id="run-icon">▶</span>
-        <span id="run-label">Run contract</span>
+        <span id="run-label">Run</span>
       </button>
     </div>
   </header>
 
-  <!-- ═══ CONTRACT DRAWER (hidden by default) ═══════════════════════ -->
-  <div class="drawer contract-drawer" id="contract-drawer" hidden>
+  <!-- CONTRACT DRAWER -->
+  <div class="card contract-drawer" id="contract-drawer" hidden>
     <div class="drawer-header">
-      <span class="drawer-title">CONTRACT YAML</span>
-      <button class="drawer-close" id="btn-close-contract" aria-label="Close">✕</button>
+      <span class="drawer-title">contract.yaml</span>
+      <button class="drawer-close" id="btn-close-contract">✕</button>
     </div>
     <pre class="contract-pre" id="contract-pre"></pre>
   </div>
 
-  <!-- ═══ ZONE: GOAL ═══════════════════════════════════════════════════ -->
-  <section class="zone zone-goal" id="zone-goal">
-    <div class="zone-eyebrow">GOAL</div>
-    <div class="goal-body">
-      <div class="goal-text">
-        <div class="goal-description" id="goal-description">
-          List all services and verify they are reachable
+  <!-- GOAL -->
+  <div class="card" id="card-goal">
+    <div class="card-section">
+      <div class="label">Goal</div>
+      <div class="goal-row">
+        <div>
+          <div class="goal-description" id="goal-description">List all services and verify they are reachable</div>
+          <div class="goal-predicate" id="goal-predicate">services.listed == true</div>
         </div>
-        <div class="goal-predicate" id="goal-predicate">services.listed == true</div>
-      </div>
-      <div class="goal-verdict" id="goal-verdict">
-        <span class="verdict-badge unsatisfied" id="verdict-badge">UNSATISFIED</span>
+        <div class="verdict" id="verdict">UNSATISFIED</div>
       </div>
     </div>
-  </section>
+  </div>
 
-  <!-- ═══ ZONE: LIMITS + UTILITIES ════════════════════════════════════ -->
-  <div class="zone-pair">
+  <!-- LIMITS + UTILITIES -->
+  <div class="split">
 
-    <section class="zone zone-limits">
-      <div class="zone-eyebrow">LIMITS</div>
-      <div id="limits-list" class="limits-list">
-        <!-- populated from state.limits -->
-        <div class="limit-row deny">
-          <span class="limit-verb">deny</span>
-          <span class="limit-pattern">*</span>
-          <span class="limit-annotation">all actions denied by default</span>
-        </div>
-        <div class="limit-row allow">
-          <span class="limit-verb">allow</span>
-          <span class="limit-pattern">Monitoring.services.list</span>
-          <span class="limit-annotation">read-only · no side effects</span>
+    <div class="card">
+      <div class="card-section">
+        <div class="label">Limits</div>
+        <div class="limits-list" id="limits-list">
+          <div class="limit-row deny">
+            <span class="limit-verb">deny</span>
+            <span class="limit-pattern">*</span>
+            <span class="limit-note">default</span>
+          </div>
+          <div class="limit-row allow">
+            <span class="limit-verb">allow</span>
+            <span class="limit-pattern">Monitoring.services.list</span>
+            <span class="limit-note">read · no side effects</span>
+          </div>
         </div>
       </div>
-    </section>
+    </div>
 
-    <section class="zone zone-utilities">
-      <div class="zone-eyebrow">UTILITIES</div>
-      <div class="utilities-body">
-        <div class="context-funnel" id="context-funnel">
+    <div class="card">
+      <div class="card-section">
+        <div class="label">Utilities</div>
+        <div class="funnel" id="funnel">
           <div class="funnel-row">
             <span class="funnel-label">Registry</span>
-            <span class="funnel-count" id="f-registry">—</span>
+            <span class="funnel-count" id="f-registry"></span>
           </div>
-          <div class="funnel-arrow">↓</div>
           <div class="funnel-row">
             <span class="funnel-label">Goal-compatible</span>
-            <span class="funnel-count" id="f-compatible">—</span>
+            <span class="funnel-count" id="f-compatible"></span>
           </div>
-          <div class="funnel-arrow">↓</div>
-          <div class="funnel-row funnel-selected">
-            <span class="funnel-label">Limit-permitted</span>
-            <span class="funnel-count selected" id="f-permitted">—</span>
+          <div class="funnel-row selected">
+            <span class="funnel-label">Permitted</span>
+            <span class="funnel-count" id="f-permitted"></span>
           </div>
         </div>
-        <div id="utility-cards" class="utility-cards">
-          <!-- populated from state.utilities -->
-          <div class="utility-card" id="uc-default">
-            <div class="uc-name">Monitoring.services.list</div>
-            <div class="uc-meta-row">
-              <span class="uc-badge read">READ</span>
-              <span class="uc-meta">no side effects</span>
+        <div class="util-cards" id="util-cards">
+          <div class="util-card" id="uc-default">
+            <div class="uc-id">Monitoring.services.list</div>
+            <div class="uc-tags">
+              <span class="tag read">read</span>
+              <span style="font-size:11px;color:var(--quiet)">no side effects</span>
             </div>
-            <div class="uc-binding">OpenAPI · GET /v0/services</div>
+            <div class="uc-transport">GET /v0/services</div>
           </div>
         </div>
       </div>
-    </section>
-
-  </div>
-
-  <!-- ═══ ZONE: RUNTIME PIPELINE ══════════════════════════════════════ -->
-  <section class="zone zone-pipeline" id="zone-pipeline">
-    <div class="zone-eyebrow">RUNTIME</div>
-    <div class="pipeline">
-
-      <div class="p-stage" data-stage="resolve" id="ps-resolve">
-        <div class="ps-count" id="psc-resolve">—</div>
-        <div class="ps-name">RESOLVE</div>
-        <div class="ps-sub">registry</div>
-      </div>
-
-      <div class="p-arrow">→</div>
-
-      <div class="p-stage" data-stage="filter" id="ps-filter">
-        <div class="ps-count" id="psc-filter">—</div>
-        <div class="ps-name">FILTER</div>
-        <div class="ps-sub">goal-compatible</div>
-      </div>
-
-      <div class="p-arrow">→</div>
-
-      <div class="p-stage" data-stage="authorize" id="ps-authorize">
-        <div class="ps-count" id="psc-authorize">—</div>
-        <div class="ps-name">AUTHORIZE</div>
-        <div class="ps-sub">permitted</div>
-      </div>
-
-      <div class="p-arrow">→</div>
-
-      <div class="p-stage" data-stage="execute" id="ps-execute">
-        <div class="ps-count" id="psc-execute">—</div>
-        <div class="ps-name">EXECUTE</div>
-        <div class="ps-sub">invocations</div>
-      </div>
-
-      <div class="p-arrow">→</div>
-
-      <div class="p-stage" data-stage="verify" id="ps-verify">
-        <div class="ps-count" id="psc-verify">—</div>
-        <div class="ps-name">VERIFY</div>
-        <div class="ps-sub">evidence</div>
-      </div>
-
     </div>
-  </section>
-
-  <!-- ═══ ZONE: DECISION + EVIDENCE ═══════════════════════════════════ -->
-  <div class="zone-pair zone-pair-bottom" id="zone-pair-bottom">
-
-    <section class="zone zone-decision">
-      <div class="zone-eyebrow">DECISION</div>
-      <div id="decision-paths" class="decision-paths">
-        <div class="decision-empty">Awaiting authorization evaluation…</div>
-      </div>
-    </section>
-
-    <section class="zone zone-evidence">
-      <div class="zone-eyebrow">EVIDENCE</div>
-      <div id="evidence-entries" class="evidence-entries">
-        <div class="evidence-empty">Awaiting verification…</div>
-      </div>
-    </section>
 
   </div>
 
-  <!-- ═══ RESULT BLOCK (revealed on proven / unresolved) ══════════════ -->
-  <section class="zone zone-result" id="zone-result" hidden>
-    <div class="result-inner" id="result-inner">
-      <div class="result-label" id="result-label">GOAL SATISFIED</div>
+  <!-- PIPELINE -->
+  <div class="card">
+    <div class="card-section">
+      <div class="label">Runtime</div>
+      <div class="pipeline">
+        <div class="p-stage" id="ps-resolve">
+          <div class="ps-count" id="psc-resolve"></div>
+          <div class="ps-name">Resolve</div>
+          <div class="ps-sub">registry</div>
+        </div>
+        <div class="p-stage" id="ps-filter">
+          <div class="ps-count" id="psc-filter"></div>
+          <div class="ps-name">Filter</div>
+          <div class="ps-sub">goal-match</div>
+        </div>
+        <div class="p-stage" id="ps-authorize">
+          <div class="ps-count" id="psc-authorize"></div>
+          <div class="ps-name">Authorize</div>
+          <div class="ps-sub">limits</div>
+        </div>
+        <div class="p-stage" id="ps-execute">
+          <div class="ps-count" id="psc-execute"></div>
+          <div class="ps-name">Execute</div>
+          <div class="ps-sub">invoke</div>
+        </div>
+        <div class="p-stage" id="ps-verify">
+          <div class="ps-count" id="psc-verify"></div>
+          <div class="ps-name">Verify</div>
+          <div class="ps-sub">evidence</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DECISION + EVIDENCE -->
+  <div class="split">
+
+    <div class="card">
+      <div class="card-section">
+        <div class="label">Decision</div>
+        <div id="decision-paths">
+          <div class="empty-note">Awaiting authorization…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-section">
+        <div class="label">Evidence</div>
+        <div id="evidence-entries">
+          <div class="empty-note">Awaiting verification…</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RESULT -->
+  <div class="card" id="card-result" hidden>
+    <div class="card-section result-block" id="result-block">
+      <div class="result-status" id="result-status">Goal satisfied</div>
       <div class="result-predicate" id="result-predicate">services.listed == true</div>
       <div class="result-verdict" id="result-verdict">PROVEN</div>
     </div>
-  </section>
+  </div>
 
-  <!-- ═══ EVENTS DRAWER (collapsible, secondary) ═══════════════════════ -->
-  <div class="events-drawer" id="events-drawer">
+  <!-- EVENTS -->
+  <div class="events-rail" id="events-rail">
     <button class="events-toggle" id="events-toggle" aria-expanded="false">
       <span class="toggle-caret" id="toggle-caret">▸</span>
       Runtime events
-      <span class="events-badge" id="events-badge">0</span>
+      <span class="ev-count" id="ev-count">0</span>
     </button>
     <div class="events-body" id="events-body" hidden>
       <div class="events-log" id="events-log"></div>
     </div>
   </div>
 
-</div><!-- /.canvas -->
+</div>
 
 <script src="app.js"></script>
 </body>
