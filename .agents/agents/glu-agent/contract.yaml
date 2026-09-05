@@ -1,0 +1,21 @@
+id: glu-demo-contract
+goals:
+  - id: goal-list-cities
+    expression: "cities.listed == true"
+    description: "Retrieve all registered cities from GasCity"
+
+limits:
+  - id: limit-deny-all
+    action_pattern: "deny *"
+    description: "Deny any action not explicitly permitted"
+  - id: limit-allow-list
+    action_pattern: "allow GasCity.cities.list"
+    description: "Permit listing cities — read only, no side-effects"
+
+utilities:
+  - GasCity.cities.list
+
+evidence_requirements:
+  - id: ev-http-ok
+    assertion: "response.status == 200"
+    description: "GasCity responded with HTTP 200"

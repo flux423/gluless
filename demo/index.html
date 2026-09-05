@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GluLess — GLU Agent Demo</title>
+  <meta name="description" content="GluLess agent demo. Goal · Limits · Utilities. Powered by AG-UI streaming protocol." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <div class="logo-mark">GLU</div>
+          <div class="logo-text">
+            <span class="logo-name">GluLess</span>
+            <span class="logo-tagline">Agent Runtime</span>
+          </div>
+        </div>
+        <div class="version-badge">v0.1.0</div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Contract</div>
+
+        <div class="contract-panel">
+          <div class="contract-block" id="block-goal">
+            <div class="contract-block-header">
+              <span class="contract-icon goal-icon">◎</span>
+              <span class="contract-label">GOAL</span>
+            </div>
+            <div class="contract-block-content" id="goal-text">cities.listed == true</div>
+          </div>
+
+          <div class="contract-block" id="block-limits">
+            <div class="contract-block-header">
+              <span class="contract-icon limit-icon">⊘</span>
+              <span class="contract-label">LIMITS</span>
+            </div>
+            <div class="contract-block-content" id="limits-list">
+              <div class="limit-item">deny *</div>
+              <div class="limit-item allow">allow GasCity.cities.list</div>
+            </div>
+          </div>
+
+          <div class="contract-block" id="block-utilities">
+            <div class="contract-block-header">
+              <span class="contract-icon utility-icon">⚡</span>
+              <span class="contract-label">UTILITIES</span>
+            </div>
+            <div class="contract-block-content" id="utilities-list">
+              <div class="utility-pill" id="util-GasCity.cities.list">
+                <span class="util-dot"></span>
+                GasCity.cities.list
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="nav-section-label" style="margin-top: 24px">Execution</div>
+
+        <div class="phase-tracker">
+          <div class="phase-step" data-phase="idle">
+            <div class="phase-dot"></div>
+            <span>Idle</span>
+          </div>
+          <div class="phase-step" data-phase="compiling">
+            <div class="phase-dot"></div>
+            <span>Compiling</span>
+          </div>
+          <div class="phase-step" data-phase="planning">
+            <div class="phase-dot"></div>
+            <span>Planning</span>
+          </div>
+          <div class="phase-step" data-phase="executing">
+            <div class="phase-dot"></div>
+            <span>Executing</span>
+          </div>
+          <div class="phase-step" data-phase="complete">
+            <div class="phase-dot"></div>
+            <span>Complete</span>
+          </div>
+        </div>
+
+        <div class="nav-section-label" style="margin-top: 24px">Evidence</div>
+        <div class="evidence-panel" id="evidence-panel">
+          <div class="evidence-empty">No evidence yet</div>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="agent-status" id="agent-status">
+          <div class="status-dot offline"></div>
+          <span>Agent offline</span>
+        </div>
+        <div class="footer-links">
+          <a href="https://docs.ag-ui.com" target="_blank" rel="noopener">AG-UI Docs</a>
+          <span>·</span>
+          <a href="https://github.com/ag-ui-protocol/ag-ui" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+      <header class="main-header">
+        <div class="header-left">
+          <h1 class="page-title">GLU Agent Console</h1>
+          <p class="page-subtitle">The contract is the program. No glue required.</p>
+        </div>
+        <div class="header-right">
+          <button class="btn btn-ghost" id="btn-clear">Clear</button>
+          <button class="btn btn-primary" id="btn-run" disabled>
+            <span class="btn-icon">▶</span>
+            Run Contract
+          </button>
+        </div>
+      </header>
+
+      <!-- Stream view -->
+      <div class="stream-view">
+        <div class="stream-log" id="stream-log">
+          <div class="stream-welcome">
+            <div class="welcome-icon">⬡</div>
+            <h2>Ready to execute</h2>
+            <p>Enter a GLU contract below or use the pre-loaded demo contract.<br/>The agent will compile, plan, and execute against declared utilities.</p>
+            <div class="welcome-pills">
+              <span class="pill">AG-UI Protocol</span>
+              <span class="pill">SSE Streaming</span>
+              <span class="pill">GLU Contracts</span>
+              <span class="pill">A2UI Ready</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- State panel -->
+      <div class="state-panel" id="state-panel" style="display:none">
+        <div class="state-panel-header">
+          <span class="state-label">Live State</span>
+          <span class="state-phase-badge" id="state-phase-badge">—</span>
+        </div>
+        <div class="state-panel-body">
+          <div class="state-grid">
+            <div class="state-metric">
+              <div class="metric-label">Plan Steps</div>
+              <div class="metric-value" id="metric-plan">0</div>
+            </div>
+            <div class="state-metric">
+              <div class="metric-label">Observations</div>
+              <div class="metric-value" id="metric-obs">0</div>
+            </div>
+            <div class="state-metric">
+              <div class="metric-label">Evidence</div>
+              <div class="metric-value" id="metric-ev">0</div>
+            </div>
+            <div class="state-metric">
+              <div class="metric-label">Events</div>
+              <div class="metric-value" id="metric-events">0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="input-area">
+        <div class="input-wrapper">
+          <div class="input-mode-tabs">
+            <button class="mode-tab active" data-mode="contract" id="tab-contract">GLU Contract (YAML)</button>
+            <button class="mode-tab" data-mode="natural" id="tab-natural">Natural Language</button>
+          </div>
+          <textarea
+            id="contract-input"
+            class="contract-textarea"
+            rows="6"
+            placeholder="Paste a GLU contract YAML here, or switch to natural language mode…"
+            spellcheck="false"
+          ></textarea>
+          <div class="input-actions">
+            <button class="btn btn-ghost btn-sm" id="btn-load-demo">Load demo contract</button>
+            <span class="input-hint" id="input-hint">AG-UI endpoint: <code>http://localhost:8080/agent</code></span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
