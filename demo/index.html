@@ -51,9 +51,9 @@
     <div class="goal-body">
       <div class="goal-text">
         <div class="goal-description" id="goal-description">
-          Retrieve all registered cities from GasCity
+          List all services and verify they are reachable
         </div>
-        <div class="goal-predicate" id="goal-predicate">cities.listed == true</div>
+        <div class="goal-predicate" id="goal-predicate">services.listed == true</div>
       </div>
       <div class="goal-verdict" id="goal-verdict">
         <span class="verdict-badge unsatisfied" id="verdict-badge">UNSATISFIED</span>
@@ -75,7 +75,7 @@
         </div>
         <div class="limit-row allow">
           <span class="limit-verb">allow</span>
-          <span class="limit-pattern">GasCity.cities.list</span>
+          <span class="limit-pattern">Monitoring.services.list</span>
           <span class="limit-annotation">read-only · no side effects</span>
         </div>
       </div>
@@ -103,12 +103,12 @@
         <div id="utility-cards" class="utility-cards">
           <!-- populated from state.utilities -->
           <div class="utility-card" id="uc-default">
-            <div class="uc-name">GasCity.cities.list</div>
+            <div class="uc-name">Monitoring.services.list</div>
             <div class="uc-meta-row">
               <span class="uc-badge read">READ</span>
               <span class="uc-meta">no side effects</span>
             </div>
-            <div class="uc-binding">OpenAPI · GET /v0/cities</div>
+            <div class="uc-binding">OpenAPI · GET /v0/services</div>
           </div>
         </div>
       </div>
@@ -185,7 +185,7 @@
   <section class="zone zone-result" id="zone-result" hidden>
     <div class="result-inner" id="result-inner">
       <div class="result-label" id="result-label">GOAL SATISFIED</div>
-      <div class="result-predicate" id="result-predicate">cities.listed == true</div>
+      <div class="result-predicate" id="result-predicate">services.listed == true</div>
       <div class="result-verdict" id="result-verdict">PROVEN</div>
     </div>
   </section>

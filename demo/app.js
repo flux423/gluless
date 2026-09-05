@@ -15,22 +15,22 @@ const AGENT_URL = 'http://localhost:8080/agent';
 
 const DEMO_CONTRACT = `id: glu-demo-contract
 goals:
-  - id: goal-list-cities
-    expression: "cities.listed == true"
-    description: "Retrieve all registered cities from GasCity"
+  - id: goal-list-services
+    expression: "services.listed == true"
+    description: "List all services and verify they are reachable"
 limits:
   - id: limit-deny-all
     action_pattern: "deny *"
     description: "Deny any action not explicitly permitted"
   - id: limit-allow-list
-    action_pattern: "allow GasCity.cities.list"
-    description: "Permit listing cities — read-only, no side effects"
+    action_pattern: "allow Monitoring.services.list"
+    description: "Permit listing services — read-only, no side effects"
 utilities:
-  - GasCity.cities.list
+  - Monitoring.services.list
 evidence_requirements:
   - id: ev-http-ok
     assertion: "response.status == 200"
-    description: "GasCity responded with HTTP 200"`.trim();
+    description: "Service API responded with HTTP 200"`.trim();
 
 // ── Pipeline stage → phase mapping ───────────────────────────
 const STAGE_PHASES = {
@@ -358,8 +358,8 @@ function applyState(s) {
   // Goal
   if (s.goals?.length) {
     const g = s.goals[0];
-    $goalDesc.textContent = g.description || 'Retrieve all registered cities from GasCity';
-    $goalPred.textContent = g.expression  || 'cities.listed == true';
+    $goalDesc.textContent = g.description || 'List all services and verify they are reachable';
+    $goalPred.textContent = g.expression  || 'services.listed == true';
   }
 
   // Limits
