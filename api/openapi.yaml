@@ -1,92 +1,238 @@
 openapi: 3.0.3
+
 info:
   title: GasCity API
-  description: The API endpoints for managing the GasCity agent platform and deployment rigs.
-  version: 0.1.0
+  description: >
+    API for managing the GasCity agent platform and deployment rigs.
+    Consumed by the GluLess runtime as a Utility registry — each operation
+    maps to a declared Utility with an explicit type, side-effect class,
+    and binding (OpenAPI / HTTP).
+  version: 0.2.0
+
 x-provider-name: GasCity
+
+x-gluless:
+  registry:
+    utilities:
+      - id: GasCity.cities.list
+        operationId: listCities
+        type: read
+        sideEffects: none
+        capability: city.collection.read
+      - id: GasCity.sessions.nudge
+        operationId: nudgeSession
+        type: mutation
+        sideEffects: external-message
+        capability: session.lifecycle.nudge
+
 servers:
   - url: http://localhost:8000/v0
     description: Local development server
+
+security:
+  - ApiKeyAuth: []
+
 paths:
+
   /cities:
     get:
-      summary: List all cities
-      description: Returns a list of all cities registered in the GasCity network.
       operationId: listCities
+      summary: List all cities
+      description: >
+        Returns all cities registered in the GasCity network.
+
+        GluLess Utility: GasCity.cities.list
+        Type: read — no side effects, safe to retry.
+      tags:
+        - cities
       responses:
         '200':
-          description: A list of cities
+          description: Successful — array of City objects
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/City'
+              example:
+                - name: blucity
+                  health: healthy
+                - name: gas-town
+                  health: degraded
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /sessions/{id}/nudge:
     post:
-      summary: Nudge a session
-      description: Request a session nudge or restart by session ID.
       operationId: nudgeSession
+      summary: Nudge a session
+      description: >
+        Request a session nudge or restart by session ID.
+
+        GluLess Utility: GasCity.sessions.nudge
+        Type: mutation — produces an external message, not idempotent.
+        Limits: requires explicit allow by contract; denied by "deny *" by default.
+      tags:
+        - sessions
       parameters:
         - name: id
           in: path
-          description: The unique identifier of the session.
+          description: Unique session identifier.
           required: true
           schema:
             type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
       requestBody:
-        description: Parameters for nudging the session.
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                force:
-                  type: boolean
-                  description: Force nudge even if the session has active tasks.
-                  default: false
+              $ref: '#/components/schemas/NudgeRequest'
       responses:
         '200':
-          description: Successful nudge operation
+          description: Nudge accepted
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: nudged
+                $ref: '#/components/schemas/NudgeResult'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
           description: Session not found
+        '409':
+          description: Session has active tasks and force was not set
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: Returns the operational status of the GasCity API server.
+      tags:
+        - meta
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
 
 components:
+
   securitySchemes:
     ApiKeyAuth:
       type: apiKey
       in: header
       name: X-GasCity-Token
+      description: >
+        Service token issued by GasCity. Required on all endpoints except /health.
+        Injected by the GluLess runtime from environment variable GASCITY_TOKEN.
 
   responses:
     UnauthorizedError:
-      description: API key is missing or invalid
+      description: API key missing or invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: unauthorized
+            message: X-GasCity-Token is missing or does not match
+
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+
     City:
       type: object
+      description: A city registered in the GasCity network.
       required:
         - name
         - health
       properties:
         name:
           type: string
+          description: Unique city identifier / slug.
           example: blucity
         health:
           type: string
+          description: Current operational health of the city.
           enum: [healthy, degraded, down]
           example: healthy
+        version:
+          type: string
+          description: Deployed platform version string.
+          example: v0.1.4
+        agents:
+          type: integer
+          description: Number of active agent sessions in this city.
+          example: 3
+
+    NudgeRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+          description: >
+            Force nudge even if the session has active tasks.
+            Use with caution — may interrupt in-flight work.
+          default: false
+
+    NudgeResult:
+      type: object
+      required:
+        - status
+        - sessionId
+      properties:
+        status:
+          type: string
+          enum: [nudged, already-idle, forced]
+          example: nudged
+        sessionId:
+          type: string
+          format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        message:
+          type: string
+          example: Session nudged successfully
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - version
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+          example: ok
+        version:
+          type: string
+          example: 0.2.0
+        uptime:
+          type: integer
+          description: Server uptime in seconds.
+          example: 3600
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: unauthorized
+        message:
+          type: string
+          example: X-GasCity-Token is missing or does not match
